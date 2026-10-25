@@ -1,0 +1,14 @@
+// iCalendar snapshot support. Subscription sync needs a separately hosted feed.
+function calendarText(value){return String(value??'').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,');}
+function foldCalendarLine(line){const encoder=new TextEncoder();let part='',bytes=0,out=[];for(const char of line){const size=encoder.encode(char).length;if(bytes+size>75){out.push(part);part=' ';bytes=1;}part+=char;bytes+=size;}out.push(part);return out.join('\r\n');}
+function validCalendarDate(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+'T12:00:00');return !Number.isNaN(d.getTime())&&iso(d)===value;}
+function buildAppleCalendar(tasks,labels,stamp=new Date()){
+ const utc=stamp.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z'),lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Fortor//Deadlines//EN','CALSCALE:GREGORIAN','X-WR-CALNAME:Fortor — Deadlines'];
+ for(const t of tasks){if(!validCalendarDate(t.due))continue;const d=new Date(t.due+'T12:00:00');d.setDate(d.getDate()+1);const end=iso(d).replace(/-/g,'');lines.push('BEGIN:VEVENT','UID:'+calendarText(encodeURIComponent(t.id))+'@fortor.local','DTSTAMP:'+utc,'DTSTART;VALUE=DATE:'+t.due.replace(/-/g,''),'DTEND;VALUE=DATE:'+end,'SUMMARY:'+calendarText((t.status==='เสร็จแล้ว'?'[Done] ':'')+t.name),'DESCRIPTION:'+calendarText('Type: '+(labels[t.category]||'Unassigned')+'\nStatus: '+(statusLabels[t.status]||t.status)),'TRANSP:TRANSPARENT','STATUS:CONFIRMED','END:VEVENT');}
+ lines.push('END:VCALENDAR');return lines.map(foldCalendarLine).join('\r\n')+'\r\n';
+}
+function selectedCalendarTasks(){return scopedTasks().filter(t=>!t.isMock&&($('calendarCompleted').checked||t.status!=='เสร็จแล้ว')&&validCalendarDate(t.due));}
+function updateCalendarPreview(){const tasks=selectedCalendarTasks();$('calendarEventCount').textContent=tasks.length+' '+(tasks.length===1?'deadline':'deadlines')+' · '+(state.categoryFilter==='all'?'All work':categoryLabels[state.categoryFilter]);$('downloadCalendar').disabled=!tasks.length;}
+function openAppleCalendar(){if(typeof closeDropdown==='function')closeDropdown();$('calendarCompleted').checked=false;updateCalendarPreview();$('appleCalendarDialog').showModal();}
+$('appleCalendar').onclick=openAppleCalendar;$('closeAppleCalendar').onclick=()=>$('appleCalendarDialog').close();$('calendarCompleted').onchange=updateCalendarPreview;
+$('downloadCalendar').onclick=()=>{const tasks=selectedCalendarTasks();if(!tasks.length)return;const blob=new Blob([buildAppleCalendar(tasks,categoryLabels)],{type:'text/calendar;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='fortor-deadlines-'+iso(new Date())+'.ics';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Calendar file downloaded — not automatic sync');};

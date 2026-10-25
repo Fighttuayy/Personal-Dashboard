@@ -1,0 +1,64 @@
+import express from 'express';
+import helmet from 'helmet';
+import {rateLimit} from 'express-rate-limit';
+import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {HttpError,csrfToken,validCSRF,requireSameOrigin,publicSession,safeJSON} from './security.mjs';
+const here=path.dirname(fileURLToPath(import.meta.url));
+const sessionHeaders=res=>{res.set('Cache-Control','no-store');res.set('Referrer-Policy','no-referrer');};
+export function createApp({config,repo,authentication,authHandler,calendar,streamIntervalMs=2000}){
+ const app=express();app.disable('x-powered-by');if(config.production)app.set('trust proxy',1);
+ app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'"],styleSrc:["'self'","'unsafe-inline'"],fontSrc:["'self'"],imgSrc:["'self'",'data:','blob:'],connectSrc:["'self'"],frameSrc:["'self'",'about:','blob:'],frameAncestors:["'none'"],objectSrc:["'none'"],baseUri:["'none'"],formAction:["'self'"],upgradeInsecureRequests:config.production?[]:null}},referrerPolicy:{policy:'no-referrer'}}));
+ app.use((req,res,next)=>{req.requestId=randomUUID();res.set('X-Request-ID',req.requestId);next();});
+ app.use('/api',rateLimit({windowMs:60_000,limit:120,standardHeaders:'draft-8',legacyHeaders:false}));
+ app.use((req,res,next)=>{if(!['GET','HEAD','OPTIONS'].includes(req.method)){try{requireSameOrigin(req,config.origin);}catch(error){return next(error);}}next();});
+ app.get('/health',(_req,res)=>res.json({ready:Boolean(authentication),version:'2.0.0'}));
+ app.get('/login',async(_req,res)=>{sessionHeaders(res);res.type('html').send(await renderAccess(Boolean(authentication)));});
+ app.get('/join',async(_req,res)=>{sessionHeaders(res);res.type('html').send(await readFile(path.join(here,'join.html'),'utf8'));});
+ if(authHandler)app.use('/api/auth',(req,res,next)=>{
+  const allowed=(req.method==='POST'&&['/sign-in/social','/sign-out'].includes(req.path))||(req.method==='GET'&&['/callback/google','/error'].includes(req.path));
+  if(!allowed)return res.status(404).json({error:'Not found'});sessionHeaders(res);return authHandler(req,res,next);
+ });
+ app.use(express.json({limit:'2mb',strict:true}));
+ const session=async(req,res,next)=>{try{sessionHeaders(res);if(!authentication)throw new HttpError(503,'Private workspace setup is not complete.','setup_required');const value=await authentication.getSession(req);if(!value?.user?.emailVerified||!await repo.checkSession(value.user.id,value.session.id))throw new HttpError(401,'Sign in with your approved Google account.','sign_in_required');req.auth=value;next();}catch(error){next(error);}};
+ const mutation=(req,_res,next)=>{if(!validCSRF(config.authSecret,req.auth.session.id,req.get('X-CSRF-Token')))return next(new HttpError(403,'Refresh this page before making changes.','csrf_rejected'));next();};
+ const owner=async(req,_res,next)=>{try{if(!await repo.isOwner(req.auth.user.id))throw new HttpError(403,'This area belongs to the dashboard owner.','owner_only');next();}catch(error){next(error);}};
+ app.get('/',async(req,res,next)=>{try{sessionHeaders(res);if(!authentication)return res.status(503).type('html').send(await renderAccess(false));const value=await authentication.getSession(req);if(!value||!await repo.checkSession(value.user.id,value.session.id))return res.redirect(303,'/login');const bootstrap=await repo.bootstrap(value.user);const template=await readFile(path.join(here,'dashboard.html'),'utf8');const payload={...bootstrap,user:publicSession(value,bootstrap.isOwner),csrf:csrfToken(config.authSecret,value.session.id)};res.type('html').send(template.replace('<!-- WORKSPACE_BOOTSTRAP -->','<script id="workspaceBootstrap" type="application/json">'+safeJSON(payload)+'</script>'));}catch(error){if(error.status===403)return res.redirect(303,'/join');next(error);}});
+ app.get('/api/session',session,async(req,res)=>res.json({user:publicSession(req.auth,await repo.isOwner(req.auth.user.id)),csrf:csrfToken(config.authSecret,req.auth.session.id)}));
+ app.get('/api/bootstrap',session,async(req,res)=>res.json(await repo.bootstrap(req.auth.user)));
+ app.post('/api/activity',session,mutation,async(req,res)=>{await repo.checkSession(req.auth.user.id,req.auth.session.id,true);res.sendStatus(204);});
+ app.post('/api/lock',session,mutation,async(req,res)=>{await repo.revokeSession(req.auth.user.id,req.auth.session.id);res.sendStatus(204);});
+ app.put('/api/personal',session,mutation,owner,async(req,res)=>{const result=await repo.putPersonal(req.auth.user.id,req.body.version,req.body.data);res.json(result);if(calendar)setImmediate(()=>calendar.sync(req.auth.user.id).catch(()=>repo.asUser(req.auth.user.id,db=>db.query('update fortor.calendar_connections set last_error=$1 where user_id=$2',['Calendar sync failed. Use Sync now to retry.',req.auth.user.id])).catch(()=>{})));});
+ app.post('/api/teams',session,mutation,owner,async(req,res)=>res.status(201).json(await repo.createTeam(req.auth.user.id,req.body.data)));
+ app.get('/api/teams/:id',session,async(req,res)=>res.json(await repo.getTeam(req.auth.user.id,req.params.id)));
+ app.put('/api/teams/:id',session,mutation,async(req,res)=>res.json(await repo.putTeam(req.auth.user.id,req.params.id,req.body.version,req.body.data)));
+ app.get('/api/teams/:id/members',session,async(req,res)=>res.json(await repo.members(req.auth.user.id,req.params.id)));
+ app.post('/api/teams/:id/invites',session,mutation,async(req,res)=>{const result=await repo.invite(req.auth.user.id,req.params.id,req.body.email,req.body.role);const {token,...metadata}=result;res.status(201).json({...metadata,url:config.origin+'/join#invite='+token});});
+ app.post('/api/invites/accept',session,mutation,async(req,res)=>res.json(await repo.accept(req.auth.user.id,req.body.token)));
+ app.delete('/api/teams/:id/invites/:invite',session,mutation,async(req,res)=>{await repo.revokeInvite(req.auth.user.id,req.params.id,req.params.invite);res.sendStatus(204);});
+ app.patch('/api/teams/:id/members/:member',session,mutation,async(req,res)=>{await repo.changeMember(req.auth.user.id,req.params.id,req.params.member,req.body.role);res.sendStatus(204);});
+ app.delete('/api/teams/:id/members/:member',session,mutation,async(req,res)=>{await repo.changeMember(req.auth.user.id,req.params.id,req.params.member,null);res.sendStatus(204);});
+ app.get('/api/sessions',session,async(req,res)=>res.json({current:req.auth.session.id,sessions:await repo.sessions(req.auth.user.id)}));
+ app.delete('/api/sessions/:id',session,mutation,async(req,res)=>{await repo.revokeSession(req.auth.user.id,req.params.id);res.sendStatus(204);});
+ app.get('/api/calendar',session,owner,async(req,res)=>res.json({connection:await repo.calendarConnection(req.auth.user.id)}));
+ app.post('/api/calendar/connect',session,mutation,owner,async(req,res)=>{if(!calendar)throw new HttpError(503,'Calendar setup is not complete.');res.json(await calendar.connect(req.auth.user.id,req.body.detail));});
+ app.post('/api/calendar/sync',session,mutation,owner,async(req,res)=>{if(!calendar)throw new HttpError(503,'Calendar setup is not complete.');res.json(await calendar.sync(req.auth.user.id));});
+ app.delete('/api/calendar',session,mutation,owner,async(req,res)=>{await repo.disconnectCalendar(req.auth.user.id);res.sendStatus(204);});
+ app.get('/api/events',session,async(req,res,next)=>{
+  let timer,closed=false,busy=false,last='';
+  const close=()=>{if(closed)return;closed=true;clearInterval(timer);res.end();};res.on('close',close);
+  res.set({'Content-Type':'text/event-stream','Cache-Control':'no-store','X-Accel-Buffering':'no'});res.flushHeaders();
+  const send=(event,data)=>{if(!closed)res.write('event: '+event+'\ndata: '+JSON.stringify(data)+'\n\n');};
+  const tick=async()=>{if(closed||busy)return;busy=true;try{const current=await authentication.getSession(req);if(!current||!await repo.checkSession(current.user.id,current.session.id)){send('locked',{});return close();}const state=await repo.bootstrap(current.user);const fingerprint=JSON.stringify({personal:state.personal?.version,teams:state.teams.map(team=>[team.id,team.version,team.role])});if(last&&last!==fingerprint)send('changed',{});else res.write(': heartbeat\n\n');last=fingerprint;}catch(error){send(error.status===403?'locked':'unavailable',{});close();}finally{busy=false;}};
+  send('connected',{});await tick();if(!closed)timer=setInterval(tick,streamIntervalMs);
+ });
+ const assets=new Set(['styles.css','cloud.css','data.js','app.js','dropdowns.js','apple-calendar.js','polish.js','overview.js','teams.js','seamless.js','cloud.js','cloud-backup.js','merge.js','access.js','join.js','logo.png','favicon.svg','MANROPE-LICENSE.txt','THAI-LICENSE.txt']);
+ app.get('/assets/fonts/:file',(req,res,next)=>{if(!/^[a-z0-9-]+\.woff2$/.test(req.params.file))return next();res.set('Cache-Control','public,max-age=31536000,immutable').sendFile(path.join(here,'../public/fonts',req.params.file));});
+ app.get('/:file',(req,res,next)=>{if(!assets.has(req.params.file))return next();res.set('Cache-Control','public,max-age=300').sendFile(path.join(here,'../public',req.params.file));});
+ app.use((_req,res)=>res.status(404).json({error:'Not found'}));
+ app.use((error,req,res,_next)=>{const status=error.status||({42501:403,23505:409,'22P02':400}[error.code])||500;if(res.headersSent)return res.end();const message=status<500?(error.status?error.message:status===403?'Access denied.':'The request could not be applied.'):'Could not complete the request. Try again.';res.status(status).json({error:message,code:error.status?error.code:'request_failed',requestId:req.requestId});});
+ return app;
+}
+async function renderAccess(configured){const html=await readFile(path.join(here,'login.html'),'utf8');return html.replace('data-ready="false"','data-ready="'+configured+'"').replace('<!-- ACCESS_STATUS -->',configured?'Use your approved Google account.':'Private access is being configured. Sign-in is not enabled yet.');}

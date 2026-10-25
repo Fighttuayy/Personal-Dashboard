@@ -1,0 +1,9 @@
+import pg from 'pg';import {toNodeHandler} from 'better-auth/node';import {createApp} from './app.mjs';import {repository} from './repository.mjs';import {createAuthentication} from './auth.mjs';import {calendarService} from './calendar.mjs';
+const production=process.env.NODE_ENV==='production';
+const origin=process.env.APP_ORIGIN||'http://127.0.0.1:4318';const url=new URL(origin);if(production&&url.protocol!=='https:')throw Error('APP_ORIGIN must use HTTPS in production');
+const config={production,origin:url.origin,authSecret:process.env.BETTER_AUTH_SECRET,ownerEmail:process.env.OWNER_GOOGLE_EMAIL?.trim().toLowerCase(),googleClientId:process.env.GOOGLE_CLIENT_ID,googleClientSecret:process.env.GOOGLE_CLIENT_SECRET};
+const ready=Boolean(process.env.DATABASE_URL&&config.authSecret?.length>=32&&config.ownerEmail&&config.googleClientId&&config.googleClientSecret);
+let pool,repo,authentication,authHandler,calendar;
+if(ready){pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:10,connectionTimeoutMillis:10000,idleTimeoutMillis:30000});const role=(await pool.query('select current_user as name,rolsuper,rolbypassrls,rolinherit from pg_roles where rolname=current_user')).rows[0];if(role.name!=='fortor_runtime'||role.rolsuper||role.rolbypassrls||role.rolinherit)throw Error('Database must connect as restricted fortor_runtime role');repo=repository(pool);authentication=createAuthentication(pool,repo,config);authHandler=toNodeHandler(authentication.auth);calendar=calendarService({repo,auth:authentication.auth});}
+const app=createApp({config,repo,authentication,authHandler,calendar});const host=process.env.HOST||(production?'0.0.0.0':'127.0.0.1');const server=app.listen(Number(process.env.PORT)||4318,host,()=>console.log(ready?'Private dashboard server ready.':'Setup screen ready; private workspace disabled until configured.'));
+process.on('SIGTERM',()=>server.close(async()=>{await pool?.end();process.exit(0);}));
