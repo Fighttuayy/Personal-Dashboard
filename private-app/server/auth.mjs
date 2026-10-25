@@ -14,7 +14,7 @@ export function createAuthentication(pool,repo,config){
    if(!approvedIdentity(context,config.ownerEmail,allowed))return {error:'account_not_allowed',errorDescription:'Use the approved owner account or an invited Google account.'};
   }},
   account:{encryptOAuthTokens:true,accountLinking:{enabled:false}},
-  session:{expiresIn:60*60*24*7,updateAge:60*60,cookieCache:{enabled:false}},
+  session:{expiresIn:60*60*24*30,disableSessionRefresh:true,updateAge:60*60,cookieCache:{enabled:false}},
   advanced:{useSecureCookies:config.production,cookiePrefix:'fortor',defaultCookieAttributes:{httpOnly:true,secure:config.production,sameSite:'lax',path:'/'},cookies:{session_token:{name:config.production?'__Host-fortor.session_token':'fortor.session_token',attributes:{httpOnly:true,secure:config.production,sameSite:'lax',path:'/'}}}},
   rateLimit:{enabled:true,window:60,max:30},
   hooks:{before:createAuthMiddleware(async ctx=>{

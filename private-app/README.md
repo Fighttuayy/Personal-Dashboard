@@ -1,51 +1,44 @@
-# Fortor's Dashboard — Private cloud upgrade
+# Fortor's Dashboard
 
-Status: implementation prepared and locally tested; NOT activated on the live GitHub Pages site. There are no production credentials or private workspace records in this package. Do not deploy the old static HTML as a replacement for this server.
+Private personal workspaces with Google sign-in, cloud persistence and scoped team spaces.
 
-## What is implemented
+- Open: https://fortors-private-dashboard.onrender.com/
+- Data & privacy: https://fortors-private-dashboard.onrender.com/privacy
+- Hosting: Render Node web service; PostgreSQL on Supabase in a separate personal organization.
+- Source: GitHub. Legacy GitHub Pages/static entry points forward to private sign-in, while offering a local backup export if this browser still has previous records.
 
-- Google-only sign-in, verified-email allowlist, immutable sole-owner binding; no application password/PIN.
-- Protected server-rendered dashboard; unconfigured deployments fail closed. Google tokens stay on the server, encrypted by Better Auth. Browser sessions use HttpOnly cookies, Secure in production, SameSite=Lax, CSRF + exact-origin checks.
-- Private personal tasks/income/notes and separately scoped team documents. PostgreSQL FORCE RLS plus restricted runtime/data roles; no browser database key.
-- Viewer/Editor invites tied to verified Google email; 24-hour expiry, hashed secret, single-use, revoke and member-role controls. Personal data is never part of the team bootstrap.
-- Cross-device updates via authorized SSE version checks (about every two seconds), optimistic writes and three-way merging. Overlapping changes require review; drafts stay in memory. This is record-level collaboration, not character-by-character coediting.
-- Lock, revoke sessions, 30-minute idle timeout, manual backup/import. Browser private workspace data is not persisted in localStorage. Exported backups are readable files and must be stored privately.
-- Separate Google Calendar consent with calendar.app.created only. One-way incomplete-task deadlines into an app-created calendar; generic event titles by default. Income/private notes excluded. iPhone Apple Calendar displays this Google calendar after the user adds the Google account.
+## Privacy model
 
-## Activation needed
+The configured, verified Google owner has the personal dashboard. Other accounts need an active, email-bound invitation and only receive authorized team data. PostgreSQL FORCE RLS and application checks enforce separation. Viewer is read-only; Editor can change shared content but cannot change ownership, team settings or membership. Invitation links are hashed, single-use, valid for 24 hours, and revocable. Session cookies are HttpOnly/Secure in production; sessions lock after 30 idle minutes by default. Remember this device is an explicit per-session opt-in, capped at 30 days from a new Google sign-in and revocable from Security. Existing sessions retain their earlier cookie expiry; start a fresh Google login for a full 30 days.
 
-1. Confirm the owner's Google email. Never infer it from GitHub. No real owner identity has been configured yet.
-2. Provision a dedicated empty Supabase/PostgreSQL database and a Node 24 web host with HTTPS. GitHub remains the code host; GitHub Pages cannot run the private server. No paid plan is selected by this package.
-3. In the Google Cloud console create a Web OAuth client, approved origins, and the exact redirect `https://YOUR_HOST/api/auth/callback/google`. Enable Google Calendar API for the optional integration. Configure consent-screen audience and test users/publishing as applicable. Testing-mode token expiry and Google verification requirements must be checked before general use.
-4. Set secrets directly in the hosting secret manager using `.env.example` as a field list. Do not paste passwords, OAuth client secrets, refresh tokens, or database URLs into chat/GitHub.
-5. Use an administrator migration job only: set MIGRATION_DATABASE_URL and run `node server/migrate.mjs`. Dedicated empty DB only. The script journals the migration and refuses pre-existing auth tables.
-6. Provision a strong LOGIN credential for the already-created `fortor_runtime` role in the database admin console. Retain NOINHERIT, NOSUPERUSER and NOBYPASSRLS; grant no extra roles. Use that role's TLS-verified connection as DATABASE_URL. Never run the web app as postgres/service-role/admin. Managed provider permission restrictions must be checked when applying the migration.
-7. Install with `npx --yes pnpm@11.25.0 install --frozen-lockfile --prod`, start `node server/index.mjs`. NODE_ENV=production, correct APP_ORIGIN, Google keys and owner email are mandatory. Start with one web replica; calendar writes serialize within the process.
-8. Verify real Google owner sign-in, disallowed account rejection, cross-device save, invite acceptance/revocation, idle lock and optional Calendar consent against the actual services. Local tests do not replace this acceptance test.
-9. Before migrating, export the original local workspace from the original browser. It will not appear automatically on the new origin. Import the personal backup only after private sign-in works. Share team content intentionally; do not import a private backup into a team.
-10. Enable and verify database backups/restore, provider MFA, access/audit monitoring and deployment rollback. Choose a hosting/database plan with suitable uptime/backups before relying on it for irreplaceable work. Free hosting may sleep and is not assumed production-ready.
+Cloud workspace records are not saved in browser localStorage. Server Google tokens are encrypted. Neither owner identity nor production secrets are committed. Authorized provider administrators can access stored records; this is not end-to-end encryption. Exported backups and team snapshots are readable files outside later revocation.
 
-## Security limits and operations
+## Using it
 
-This is not end-to-end encryption: the application server and authorized database administrators can access stored work. Google account security protects sign-in; it does not replace application authorization. No claim of absolute security is made.
+Sign in with the approved owner Google account. Use Teams to create separate shared spaces and explicitly copy selected personal items when intended. Shared task copies exclude income and private task notes. Invite by email with Viewer or Editor access. Google OAuth must be in production for invited members outside its test-user list.
 
-Offline edits remain in memory; do not close the page before Synced. Failed calendar updates surface a status and can be retried with Sync now; there is no durable job worker yet, so do not promise background retry after server restarts. Stopping sync leaves previously created calendar events; deleting/revoking Google access is a separate user action. Apple controls refresh timing. Team exports are static readable snapshots outside later revocation; share the authenticated team invite for controlled access.
+For Calendar, open Security. Grant the separate Calendar permission, choose generic deadline titles or opt into task titles, then connect. Only the app-created calendar is managed; income and private notes are excluded. Add the Google account in iPhone Calendar settings and select the dedicated deadline calendar. Apple controls refresh timing. Calendar API is enabled; actual access and event sync still require the owner's separate consent. Stopping sync leaves existing events. Automatic updates are best-effort with a visible failure status and manual Sync now; no durable retry worker is included.
 
-Keep the auth secret stable and backed up in a secret manager: it protects sessions and encrypted provider credentials. Disable or revoke affected sessions/tokens during an incident. Never expose admin DB credentials, secrets or logs containing tokens. Keep database TLS certificate verification enabled.
+## Development and validation
 
-## Local verification
+Node 24 and pnpm 11.25.0. Inside private-app (or this extracted package):
 
-`pnpm install --frozen-lockfile` then `node --test tests/*.test.mjs`.
+```sh
+pnpm install --frozen-lockfile
+node --test tests/*.test.mjs
+node server/index.mjs
+```
 
-Tests run against PGlite (real PostgreSQL policy execution) and Supertest. Coverage includes personal/team isolation, roles, invite replay/expiry/revocation, CAS conflicts, CSRF, missing-setup denial, auth-token endpoint denial, safe bootstrap encoding, session idle timeout, merge conflicts and calendar privacy. Actual Google/Supabase/hosting acceptance remains pending.
+Without credentials, local startup presents a disabled setup screen. No bypass/demo login route is shipped. Automated tests cover PostgreSQL access policies, owner/member isolation, invitation expiry/replay/revocation, session idle checks, CSRF, safe bootstrap, token endpoint denial, Google scope overrides, merge conflicts, calendar privacy, public privacy routing and loss-safe migration export.
 
-Without credentials, `node server/index.mjs` binds 127.0.0.1:4318 and only presents the disabled setup screen. No bypass/demo-login endpoint exists. The separate development UI fixture is deliberately excluded from deliverables.
+Live acceptance checked Google owner sign-in, persisted task creation, live update in another tab without reload, anonymous API denial, blocked HTML/token endpoints, cross-origin write denial and verified database TLS with the restricted runtime role. Temporary records were removed. Real team-recipient sign-in and Apple-device calendar display require actual participants/devices and must not be claimed as already tested.
 
-## References
+## Fresh deployment
 
-- Better Auth Google: https://better-auth.com/docs/authentication/google
-- Better Auth security: https://better-auth.com/docs/reference/security
-- Google Calendar scopes: https://developers.google.com/workspace/calendar/api/auth
-- Apple Calendar accounts: https://support.apple.com/en-gb/guide/iphone/iphc37be2016/ios
-- Supabase RLS: https://supabase.com/docs/guides/database/postgres/row-level-security
-- Render free-plan limits: https://render.com/docs/free
+Use a dedicated empty database. Review .env.example for variable names and set actual values in the host secret manager. Create a Web Google OAuth client with redirect `https://YOUR_HOST/api/auth/callback/google`; consent initially needs openid/email/profile only. Enable Google Calendar API for the optional integration.
+
+Run server/migrate.mjs once with MIGRATION_DATABASE_URL from an administrator-only migration job. Provision a strong LOGIN credential for fortor_runtime while retaining NOINHERIT, NOSUPERUSER and NOBYPASSRLS. Web DATABASE_URL must use this role, never an admin/service-role credential. Use verified TLS and the provider's current CA. The supplied public Supabase Root 2021 CA was downloaded from the project's official Database Settings certificate link and is valid until April 2031.
+
+BETTER_AUTH_SECRET protects sessions and encrypted provider tokens; keep it stable and backed up securely. OWNER_GOOGLE_EMAIL defines the first allowed owner; the database binding is then immutable. Owner transfers require an explicit administrator procedure.
+
+Use one web replica until calendar synchronization is coordinated across processes. Free Render hosting may sleep and does not imply production uptime. Choose and verify a suitable backup/restore plan before relying on the service for irreplaceable work. No paid plan has been selected automatically. The render.yaml is a configuration draft and has not been Render-CLI validated; the running service was created and verified directly.

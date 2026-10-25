@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {rea
 import {repository} from '../server/repository.mjs';import {digest,secretToken} from '../server/security.mjs';
 const schema=await readFile(new URL('../db/001-private-workspace.sql',import.meta.url),'utf8');
 test('Postgres enforces personal isolation, roles, invitations, revocation and optimistic writes',async t=>{
- const db=new PGlite();await db.exec(schema);
+ const db=new PGlite();await db.exec(schema);await db.exec(await readFile(new URL('../db/002-remember-device.sql',import.meta.url),'utf8'));
  for(const id of ['owner','editor','viewer','outsider'])await db.query('insert into public."user"(id,name,email,"emailVerified") values($1,$2,$3,true)',[id,id,id+'@example.com']);
  await db.query("select fortor.bind_owner('owner')");
  const pool={query:(sql,args)=>db.query(sql,args),connect:async()=>({query:(sql,args)=>db.query(sql,args),release(){}})},repo=repository(pool);

@@ -41,6 +41,8 @@ export function createApp({config,repo,authentication,authHandler,calendar,strea
  app.delete('/api/teams/:id/invites/:invite',session,mutation,async(req,res)=>{await repo.revokeInvite(req.auth.user.id,req.params.id,req.params.invite);res.sendStatus(204);});
  app.patch('/api/teams/:id/members/:member',session,mutation,async(req,res)=>{await repo.changeMember(req.auth.user.id,req.params.id,req.params.member,req.body.role);res.sendStatus(204);});
  app.delete('/api/teams/:id/members/:member',session,mutation,async(req,res)=>{await repo.changeMember(req.auth.user.id,req.params.id,req.params.member,null);res.sendStatus(204);});
+ app.get('/api/session/remember',session,async(req,res)=>res.json(await repo.sessionMode(req.auth.user.id,req.auth.session.id)));
+ app.post('/api/session/remember',session,mutation,async(req,res)=>res.json(await repo.rememberSession(req.auth.user.id,req.auth.session.id,req.body.remember)));
  app.get('/api/sessions',session,async(req,res)=>res.json({current:req.auth.session.id,sessions:await repo.sessions(req.auth.user.id)}));
  app.delete('/api/sessions/:id',session,mutation,async(req,res)=>{await repo.revokeSession(req.auth.user.id,req.params.id);res.sendStatus(204);});
  app.get('/api/calendar',session,owner,async(req,res)=>res.json({connection:await repo.calendarConnection(req.auth.user.id)}));
