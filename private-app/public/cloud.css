@@ -5,3 +5,21 @@
 .net-deduction{display:block;margin-top:8px;color:var(--muted);font-size:12px;font-weight:400;line-height:1.5;letter-spacing:0;font-variant-numeric:tabular-nums}
 .revenue-total .net-deduction{font-size:13px;margin-top:6px}
 .digest-money-total .net-deduction{margin-top:6px}
+
+/* Work type identity follows stable category IDs across all personal views. */
+.type-tag{color:var(--text);background:rgba(var(--type-rgb,214,91,120),.12);border:1px solid rgba(var(--type-rgb,214,91,120),.35)}
+.type-tag::before{content:'';display:inline-block;width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--type-color,#d65b78);margin-right:6px}
+.cal-task{background:rgba(var(--type-rgb,214,91,120),.14);border:1px solid rgba(var(--type-rgb,214,91,120),.23);border-left:3px solid var(--type-color,#d65b78);color:var(--text)}
+.cal-task:hover{background:rgba(var(--type-rgb,214,91,120),.25)}
+.calendar-type-key{display:flex;flex-wrap:wrap;gap:8px;padding:0 24px 18px}
+.type-edit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+.type-color-options{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:0 0 8px}
+.type-color-label{display:flex;align-items:center;gap:10px;margin:0;color:var(--muted);font-size:13px}
+.type-color-label input[type=color]{width:34px;height:30px;padding:3px;border-radius:8px;cursor:pointer;margin:0}
+.type-color-swatch{width:25px;height:25px;min-width:25px;border-radius:50%;background:var(--swatch);border:3px solid transparent;box-shadow:inset 0 0 0 1px #ffffff25}
+.type-color-swatch[aria-pressed=true]{outline:2px solid var(--text);outline-offset:3px}
+::view-transition-old(root){animation:theme-out .42s ease both;mix-blend-mode:normal}
+::view-transition-new(root){animation:theme-in .42s ease both;mix-blend-mode:normal}
+@keyframes theme-out{to{opacity:0}}@keyframes theme-in{from{opacity:0}to{opacity:1}}
+body.theme-fading{animation:theme-fallback .45s ease both}@keyframes theme-fallback{from{opacity:.6}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){::view-transition-old(root),::view-transition-new(root),body.theme-fading{animation:none}}

@@ -12,6 +12,7 @@ function workspaceText(value,max,required=false){
  return value;
 }
 function workspaceId(value){if(typeof value!=='string'||!/^[-a-zA-Z0-9_]{1,150}$/.test(value)||['__proto__','constructor','prototype'].includes(value))throw Error('A record has an invalid ID.');return value;}
+function workspaceColor(value){if(typeof value!=='string'||!/^#[0-9a-fA-F]{6}$/.test(value))throw Error('A work type color is invalid.');return value.toLowerCase();}
 function workspaceList(value,max=10000){if(value==null)return [];if(!Array.isArray(value)||value.length>max)throw Error('A collection in this backup is invalid or too large.');return value;}
 function workspaceStatus(value){if(!['ยังไม่เริ่ม','กำลังทำ','รอตรวจ','เสร็จแล้ว'].includes(value))throw Error('A task status is invalid.');return value;}
 function workspaceTimestamp(value){if(value==null)return new Date().toISOString();if(typeof value!=='string'||Number.isNaN(Date.parse(value)))throw Error('A saved date is invalid.');return new Date(value).toISOString();}
@@ -22,7 +23,7 @@ function normalizeWorkspace(raw){
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||!Array.isArray(raw.tasks))throw Error('Choose a Fortor dashboard JSON backup.');
  if(raw.schemaVersion!=null&&raw.schemaVersion!==1)throw Error('This backup needs a newer version of the dashboard.');
  const result=emptyWorkspace();
- if(raw.categories!=null&&workspaceList(raw.categories,500).length)result.categories=workspaceUnique(raw.categories.map(c=>({id:workspaceId(c.id),name:workspaceText(c.name,40,true)})));
+ if(raw.categories!=null&&workspaceList(raw.categories,500).length)result.categories=workspaceUnique(raw.categories.map(c=>({id:workspaceId(c.id),name:workspaceText(c.name,40,true),...(c.color==null?{}:{color:workspaceColor(c.color)})})));
  const categoryIds=new Set(result.categories.map(c=>c.id));
  result.tasks=workspaceUnique(workspaceList(raw.tasks).filter(t=>t&&!t.isMock&&!/^mock-fortor-\d+$/.test(String(t.id))).map(t=>{
   const category=workspaceId(t.category||result.categories[0].id);
