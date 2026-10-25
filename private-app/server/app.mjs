@@ -14,6 +14,7 @@ export function createApp({config,repo,authentication,authHandler,calendar,strea
  app.use((req,res,next)=>{req.requestId=randomUUID();res.set('X-Request-ID',req.requestId);next();});
  app.use('/api',rateLimit({windowMs:60_000,limit:120,standardHeaders:'draft-8',legacyHeaders:false}));
  app.use((req,res,next)=>{if(!['GET','HEAD','OPTIONS'].includes(req.method)){try{requireSameOrigin(req,config.origin);}catch(error){return next(error);}}next();});
+ app.get('/privacy',async(_req,res)=>{sessionHeaders(res);const template=await readFile(path.join(here,'privacy.html'),'utf8');const contact=String(config.ownerEmail||'Contact the workspace owner who invited you.').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));res.type('html').send(template.replace('{{CONTACT_EMAIL}}',contact));});
  app.get('/health',(_req,res)=>res.json({ready:Boolean(authentication),version:'2.0.0'}));
  app.get('/login',async(_req,res)=>{sessionHeaders(res);res.type('html').send(await renderAccess(Boolean(authentication)));});
  app.get('/join',async(_req,res)=>{sessionHeaders(res);res.type('html').send(await readFile(path.join(here,'join.html'),'utf8'));});
