@@ -1,7 +1,7 @@
 import {betterAuth} from 'better-auth';
 import {createAuthMiddleware,APIError} from 'better-auth/api';
 import {fromNodeHeaders} from 'better-auth/node';
-import {CALENDAR_SCOPE,approvedIdentity} from './security.mjs';
+import {CALENDAR_SCOPE,approvedIdentity,googlePermissionRequest} from './security.mjs';
 export function createAuthentication(pool,repo,config){
  let auth;
  auth=betterAuth({
@@ -21,8 +21,7 @@ export function createAuthentication(pool,repo,config){
    if(ctx.path!=='/sign-in/social')return;
    const body=ctx.body||{};
    if(body.provider!=='google'||body.idToken)throw new APIError('BAD_REQUEST',{message:'Use the Google sign-in button.'});
-   const scopes=body.scopes||[];
-   if(scopes.some(scope=>!['openid','email','profile',CALENDAR_SCOPE].includes(scope)))throw new APIError('FORBIDDEN',{message:'Unapproved permission scope.'});
+   let scopes;try{scopes=googlePermissionRequest(body);}catch(error){throw new APIError(error.status===400?'BAD_REQUEST':'FORBIDDEN',{message:error.message});}
    if(scopes.includes(CALENDAR_SCOPE)){
     const session=await auth.api.getSession({headers:ctx.headers});
     if(!session||!await repo.isOwner(session.user.id))throw new APIError('FORBIDDEN',{message:'Only the owner can connect a calendar.'});
