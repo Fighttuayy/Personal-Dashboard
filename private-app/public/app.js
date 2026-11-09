@@ -31,13 +31,75 @@ function toast(t){$('toast').textContent=t;$('toast').classList.add('show');clea
 function save(){if(window.cloudReady&&typeof queueCloudSave==='function')queueCloudSave();return true;}
 function applyTheme(){document.body.classList.toggle('light',state.theme==='light');$('theme').innerHTML=icon(state.theme==='light'?'moon':'sun')+`<span>${state.theme==='light'?'Dark mode':'Light mode'}</span>`;$('theme').setAttribute('aria-label',state.theme==='light'?'Switch to dark mode':'Switch to light mode');}
 function deductionNote(amount){return '<div class="net-deduction">After 3% deduction · ฿'+money(Math.round(amount*97)/100)+'</div>';}
+const currentIncomeMonth = now.getFullYear() * 12 + now.getMonth();
+let customIncomeRange = [currentIncomeMonth - 5, currentIncomeMonth];
+
+function incomeMonthKey(index) {
+ const year = String(Math.floor(index / 12)).padStart(4, '0');
+ const month = String(index % 12 + 1).padStart(2, '0');
+ return year + '-' + month;
+}
+
+function incomeMonthIndex(value) {
+ if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value) || value.startsWith('0000')) return NaN;
+ return Number(value.slice(0, 4)) * 12 + Number(value.slice(5, 7)) - 1;
+}
+
+function renderIncomeChart(tasks) {
+ const period = $('incomePeriod').value;
+ const ranges = {
+  year: [now.getFullYear() * 12, now.getFullYear() * 12 + 11],
+  six: [currentIncomeMonth - 5, currentIncomeMonth],
+  month: [currentIncomeMonth, currentIncomeMonth],
+  custom: customIncomeRange
+ };
+ const [start, end] = ranges[period] || ranges.six;
+ const step = Math.ceil((end - start + 1) / 12);
+ const values = Array(Math.ceil((end - start + 1) / step)).fill(0);
+ for (const task of tasks) {
+  const month = incomeMonthIndex(task.paidDate?.slice(0, 7) || '');
+  if (month >= start && month <= end) values[Math.floor((month - start) / step)] += task.paid;
+ }
+ const max = Math.max(...values, 1);
+ const showYear = Math.floor(start / 12) !== Math.floor(end / 12);
+ const monthLabel = (index, year) => new Date(incomeMonthKey(index) + '-01T12:00:00')
+  .toLocaleDateString('en-GB', {month:'short', ...(year ? {year:'2-digit'} : {})});
+ $('chart').innerHTML = values.map((value, i) => {
+  const first = start + i * step;
+  const last = Math.min(end, first + step - 1);
+  const label = monthLabel(first, showYear);
+  const detail = first === last ? monthLabel(first, true) : monthLabel(first, true) + ' – ' + monthLabel(last, true);
+  return `<div class="bar-col" title="${esc(detail)} · ฿${money(value)}"><div class="bar" style="height:${Math.max(1,value/max*82)}%"><b>${money(value)}</b></div><span>${esc(label)}</span></div>`;
+ }).join('');
+ const total = values.reduce((sum, value) => sum + value, 0);
+ $('chartTotal').innerHTML = '<small>฿</small>' + money(total) + deductionNote(total);
+ $('incomeRange').hidden = period !== 'custom';
+ $('incomeGrouping').hidden = step === 1;
+ $('incomeGrouping').textContent = 'Bars group up to ' + step + ' months each.';
+}
+
+$('incomeFrom').value = incomeMonthKey(customIncomeRange[0]);
+$('incomeTo').value = incomeMonthKey(customIncomeRange[1]);
+$('incomePeriod').onchange = () => renderIncomeChart(scopedTasks());
+$('incomeRange').oninput = () => $('incomeTo').setCustomValidity('');
+$('incomeRange').onsubmit = event => {
+ event.preventDefault();
+ const from = incomeMonthIndex($('incomeFrom').value);
+ const to = incomeMonthIndex($('incomeTo').value);
+ const message = !Number.isFinite(from) || !Number.isFinite(to) ? 'Enter both months as YYYY-MM.'
+  : from > to ? 'The end month must be on or after the start month.' : '';
+ $('incomeTo').setCustomValidity(message);
+ if (!$('incomeTo').reportValidity()) return;
+ customIncomeRange = [from, to];
+ renderIncomeChart(scopedTasks());
+};
+
 function render(){syncCategoryControls();applyTheme();$('categoryFilter').value=state.categoryFilter;$('taskCount').textContent=state.tasks.filter(t=>t.status!=='เสร็จแล้ว').length;
  const scoped=scopedTasks(),finance=scoped;
  const active=scoped.filter(t=>t.status!=='เสร็จแล้ว'),currentMonth=today.slice(0,7),received=finance.filter(t=>t.paidDate?.startsWith(currentMonth)).reduce((a,t)=>a+t.paid,0),outstanding=finance.reduce((a,t)=>a+Math.max(0,t.amount-t.paid),0);
  const cards=[['Open tasks',active.length,'tasks','tasks'],['Due this week',active.filter(t=>days(t.due)>=0&&days(t.due)<=7).length,'tasks','calendar'],['Received this month','฿'+money(received),'','income',received],['Outstanding','฿'+money(outstanding),'','income',outstanding]];
  $('stats').innerHTML=cards.map(([label,value,unit,symbol,netBase])=>`<div class="stat"><div class="stat-top">${label}<span>${icon(symbol)}</span></div><strong>${value}<em>${unit}</em></strong>${netBase===undefined?'':deductionNote(netBase)}</div>`).join('');
- let series=Array.from({length:6},(_,i)=>{let d=new Date(now.getFullYear(),now.getMonth()-5+i,1),prefix=iso(d).slice(0,7);return {label:d.toLocaleDateString('en-GB',{month:'short'}),value:finance.filter(t=>t.paidDate?.startsWith(prefix)).reduce((a,t)=>a+t.paid,0)}}),max=Math.max(...series.map(x=>x.value),1);
- $('chart').innerHTML=series.map(x=>`<div class="bar-col" title="${x.label} ฿${money(x.value)}"><div class="bar" style="height:${Math.max(1,x.value/max*82)}%"><b>${money(x.value)}</b></div><span>${x.label}</span></div>`).join('');$('chartTotal').innerHTML='<small>฿</small>'+money(series.reduce((a,x)=>a+x.value,0))+deductionNote(series.reduce((a,x)=>a+x.value,0));
+ renderIncomeChart(finance);
  $('deadlines').innerHTML=active.sort((a,b)=>a.due.localeCompare(b.due)).slice(0,3).map(t=>{let d=new Date(t.due+'T00:00:00'),n=days(t.due);return `<div class="deadline" role="button" tabindex="0" data-id="${t.id}"><div class="date-box"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-GB',{month:'short'})}</small></div><div class="deadline-info"><b>${esc(t.name)}</b><small>${esc(t.client||'Personal project')}</small></div><span class="days ${n<=2?'urgent':''}">${n<0?-n+'d overdue':n===0?'Today':n===1?'Tomorrow':'In '+n+'d'}</span></div>`}).join('')||'<div class="empty">No upcoming deadlines</div>';
  $('overview').classList.toggle('hidden',view!=='overview'&&view!=='income');$('workPanel').classList.toggle('hidden',view==='calendar');$('calendarPanel').classList.toggle('hidden',view!=='calendar');
  const mode=view==='overview'?state.dashboardMode:'standard';
