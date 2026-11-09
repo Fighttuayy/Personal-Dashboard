@@ -65,7 +65,7 @@ function renderSheetsConnection() {
   buttons.forEach(button => {button.disabled = true;});
   try {
    if (action === 'authorize') {
-    const response = await fetch('/api/auth/sign-in/social',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'google',callbackURL:'/',scopes:['https://www.googleapis.com/auth/drive.file'],additionalParams:{prompt:'select_account consent',access_type:'offline'},requestSignUp:false})});
+    const response = await fetch('/api/auth/sign-in/social',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'google',callbackURL:'/?integration=sheets',scopes:['https://www.googleapis.com/auth/drive.file'],additionalParams:{prompt:'select_account consent',access_type:'offline'},requestSignUp:false})});
     const result = await response.json();
     if (!response.ok || !result.url || new URL(result.url).origin !== 'https://accounts.google.com') throw Error('Could not start Sheets consent.');
     location.assign(result.url);
@@ -76,4 +76,12 @@ function renderSheetsConnection() {
   } catch (error) {status.textContent = error.message;}
   finally {buttons.forEach(button => {button.disabled = false;});}
  };
+}
+
+if (cloud.base.isOwner && new URLSearchParams(location.search).get('integration') === 'sheets') {
+ const destination = new URL(location.href);
+ destination.searchParams.delete('integration');
+ history.replaceState(null, '', destination);
+ navigate('security');
+ document.querySelector('#securityPanel [data-action="connect"]')?.scrollIntoView({block:'center'});
 }

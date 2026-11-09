@@ -1,5 +1,5 @@
 import {buildSheetsSnapshot} from './sheets-snapshot.mjs';
-import {digest,HttpError,SHEETS_SCOPE} from './security.mjs';
+import {digest,HttpError} from './security.mjs';
 
 const MARKER = 'fortor-work-type';
 const cells = row => ({values:row.map(value => ({userEnteredValue:
@@ -57,7 +57,8 @@ export function sheetsService({repo,auth,fetchImpl=fetch}) {
  }
  async function token(userId) {
   const result = await auth.api.getAccessToken({body:{providerId:'google',userId}}).catch(()=>null);
-  if (!result?.accessToken || !result.scopes?.includes(SHEETS_SCOPE)) throw new HttpError(409,'Allow Google Sheets access first.','sheets_permission');
+  // The Google API checks the live token. Sign-in does not refresh Better Auth’s stored scope list.
+  if (!result?.accessToken) throw new HttpError(409,'Allow Google Sheets access first.','sheets_permission');
   return result.accessToken;
  }
  async function request(accessToken,path,body) {
@@ -65,7 +66,11 @@ export function sheetsService({repo,auth,fetchImpl=fetch}) {
    method:body?'POST':'GET',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},
    body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(15000)
   });
-  if (response.status === 403) throw new HttpError(409,'Google Sheets access was denied. Check authorization and whether the Sheets API is enabled.','sheets_permission');
+  if (response.status === 403) {
+   const payload = await response.json().catch(()=>null);
+   const disabled = payload?.error?.details?.some(detail => detail.reason === 'SERVICE_DISABLED');
+   throw new HttpError(409,disabled ? 'The Google Sheets API is disabled for this project.' : 'Google denied Sheets access. Use Allow Sheets access and finish consent, then try again.','sheets_permission');
+  }
   if (response.status === 401) throw new HttpError(409,'Reconnect Google Sheets to renew access.','sheets_permission');
   if (!response.ok) throw new HttpError(502,'Google Sheets could not complete the sync. Try Sync now.','sheets_unavailable');
   return response.json();
