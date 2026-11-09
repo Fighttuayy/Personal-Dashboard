@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {HttpError,csrfToken,validCSRF,requireSameOrigin,publicSession,safeJSON} from './security.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const sessionHeaders=res=>{res.set('Cache-Control','no-store');res.set('Referrer-Policy','no-referrer');};
-export function createApp({config,repo,authentication,authHandler,calendar,streamIntervalMs=2000}){
+export function createApp({config,repo,authentication,authHandler,calendar,sheets,streamIntervalMs=2000}){
  const app=express();app.disable('x-powered-by');if(config.production)app.set('trust proxy',1);
  app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'"],styleSrc:["'self'","'unsafe-inline'"],fontSrc:["'self'"],imgSrc:["'self'",'data:','blob:'],connectSrc:["'self'"],mediaSrc:["'self'"],frameSrc:["'self'",'about:','blob:'],frameAncestors:["'none'"],objectSrc:["'none'"],baseUri:["'none'"],formAction:["'self'"],upgradeInsecureRequests:config.production?[]:null}},referrerPolicy:{policy:'no-referrer'}}));
  app.use((req,res,next)=>{req.requestId=randomUUID();res.set('X-Request-ID',req.requestId);next();});
@@ -31,7 +31,7 @@ export function createApp({config,repo,authentication,authHandler,calendar,strea
  app.get('/api/bootstrap',session,async(req,res)=>res.json(await repo.bootstrap(req.auth.user)));
  app.post('/api/activity',session,mutation,async(req,res)=>{await repo.checkSession(req.auth.user.id,req.auth.session.id,true);res.sendStatus(204);});
  app.post('/api/lock',session,mutation,async(req,res)=>{await repo.revokeSession(req.auth.user.id,req.auth.session.id);res.sendStatus(204);});
- app.put('/api/personal',session,mutation,owner,async(req,res)=>{const result=await repo.putPersonal(req.auth.user.id,req.body.version,req.body.data);res.json(result);if(calendar)setImmediate(()=>calendar.sync(req.auth.user.id).catch(()=>repo.asUser(req.auth.user.id,db=>db.query('update fortor.calendar_connections set last_error=$1 where user_id=$2',['Calendar sync failed. Use Sync now to retry.',req.auth.user.id])).catch(()=>{})));});
+ app.put('/api/personal',session,mutation,owner,async(req,res)=>{const result=await repo.putPersonal(req.auth.user.id,req.body.version,req.body.data);res.json(result);if(sheets)setImmediate(()=>sheets.sync(req.auth.user.id).catch(()=>{}));if(calendar)setImmediate(()=>calendar.sync(req.auth.user.id).catch(()=>repo.asUser(req.auth.user.id,db=>db.query('update fortor.calendar_connections set last_error=$1 where user_id=$2',['Calendar sync failed. Use Sync now to retry.',req.auth.user.id])).catch(()=>{})));});
  app.post('/api/teams',session,mutation,owner,async(req,res)=>res.status(201).json(await repo.createTeam(req.auth.user.id,req.body.data)));
  app.get('/api/teams/:id',session,async(req,res)=>res.json(await repo.getTeam(req.auth.user.id,req.params.id)));
  app.put('/api/teams/:id',session,mutation,async(req,res)=>res.json(await repo.putTeam(req.auth.user.id,req.params.id,req.body.version,req.body.data)));
@@ -45,6 +45,10 @@ export function createApp({config,repo,authentication,authHandler,calendar,strea
  app.post('/api/session/remember',session,mutation,async(req,res)=>res.json(await repo.rememberSession(req.auth.user.id,req.auth.session.id,req.body.remember)));
  app.get('/api/sessions',session,async(req,res)=>res.json({current:req.auth.session.id,sessions:await repo.sessions(req.auth.user.id)}));
  app.delete('/api/sessions/:id',session,mutation,async(req,res)=>{await repo.revokeSession(req.auth.user.id,req.params.id);res.sendStatus(204);});
+ app.get('/api/sheets',session,owner,async(req,res)=>res.json({connection:await sheets.connection(req.auth.user.id)}));
+ app.post('/api/sheets/connect',session,mutation,owner,async(req,res)=>{await sheets.connect(req.auth.user.id);res.json({connection:await sheets.connection(req.auth.user.id)});});
+ app.post('/api/sheets/sync',session,mutation,owner,async(req,res)=>{await sheets.sync(req.auth.user.id,true);res.json({connection:await sheets.connection(req.auth.user.id)});});
+ app.delete('/api/sheets',session,mutation,owner,async(req,res)=>{await sheets.disconnect(req.auth.user.id);res.sendStatus(204);});
  app.get('/api/calendar',session,owner,async(req,res)=>res.json({connection:await repo.calendarConnection(req.auth.user.id)}));
  app.post('/api/calendar/connect',session,mutation,owner,async(req,res)=>{if(!calendar)throw new HttpError(503,'Calendar setup is not complete.');res.json(await calendar.connect(req.auth.user.id,req.body.detail));});
  app.post('/api/calendar/sync',session,mutation,owner,async(req,res)=>{if(!calendar)throw new HttpError(503,'Calendar setup is not complete.');res.json(await calendar.sync(req.auth.user.id));});

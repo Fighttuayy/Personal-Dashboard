@@ -1,7 +1,7 @@
 import {betterAuth} from 'better-auth';
 import {createAuthMiddleware,APIError} from 'better-auth/api';
 import {fromNodeHeaders} from 'better-auth/node';
-import {CALENDAR_SCOPE,approvedIdentity,googlePermissionRequest} from './security.mjs';
+import {CALENDAR_SCOPE,SHEETS_SCOPE,approvedIdentity,googlePermissionRequest} from './security.mjs';
 export function createAuthentication(pool,repo,config){
  let auth;
  auth=betterAuth({
@@ -22,9 +22,9 @@ export function createAuthentication(pool,repo,config){
    const body=ctx.body||{};
    if(body.provider!=='google'||body.idToken)throw new APIError('BAD_REQUEST',{message:'Use the Google sign-in button.'});
    let scopes;try{scopes=googlePermissionRequest(body);}catch(error){throw new APIError(error.status===400?'BAD_REQUEST':'FORBIDDEN',{message:error.message});}
-   if(scopes.includes(CALENDAR_SCOPE)){
+   if(scopes.includes(CALENDAR_SCOPE)||scopes.includes(SHEETS_SCOPE)){
     const session=await auth.api.getSession({headers:ctx.headers});
-    if(!session||!await repo.isOwner(session.user.id))throw new APIError('FORBIDDEN',{message:'Only the owner can connect a calendar.'});
+    if(!session||!await repo.checkSession(session.user.id,session.session.id)||!await repo.isOwner(session.user.id))throw new APIError('FORBIDDEN',{message:'Only the owner can connect Google services.'});
    }
   })},
   databaseHooks:{session:{create:{before:async session=>{

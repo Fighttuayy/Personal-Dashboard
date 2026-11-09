@@ -35,7 +35,7 @@ $('copyInvitation').onclick=async()=>{await navigator.clipboard.writeText($('inv
 function showDevicePreference(result){const checkbox=$('rememberCurrentDevice'),message=$('rememberDeviceStatus');if(!checkbox||!message)return;checkbox.checked=Boolean(result.rememberedUntil);checkbox.disabled=false;message.textContent=result.rememberedUntil?'Remembered until '+new Date(result.rememberedUntil).toLocaleString()+'. Lock or revoke this device at any time. Existing logins may expire sooner than 30 days.':'Not remembered. Locks after 30 minutes without activity.';}
 async function loadDevicePreference(){try{showDevicePreference(await cloudRequest('/api/session/remember'));$('rememberCurrentDevice').onchange=async()=>{const checkbox=$('rememberCurrentDevice'),remember=checkbox.checked;checkbox.disabled=true;try{showDevicePreference(await cloudRequest('/api/session/remember','POST',{remember}));}catch(e){checkbox.checked=!remember;checkbox.disabled=false;$('rememberDeviceStatus').textContent=e.message;}};}catch(e){if($('rememberDeviceStatus'))$('rememberDeviceStatus').textContent=e.message;}}
 function renderSecurity(){$('securityPanel').innerHTML='<section class="panel security-card"><h2>Account & access</h2><p>'+esc(cloudBootstrap.user.email)+' · Google sign-in</p><p>Choose how long this device stays signed in. Lock workspace and device revocation always take effect on the server.</p><label class="remember-device"><input type="checkbox" id="rememberCurrentDevice" disabled><span>Remember this device — up to 30 days</span></label><p id="rememberDeviceStatus" role="status">Loading device preference…</p><p><a href="/login?remember=1">Start a fresh 30-day Google login ↗</a></p><button class="team-secondary" id="loadSessions">Manage signed-in devices</button><div id="sessionList"></div></section>'+(cloud.base.isOwner?'<section class="panel security-card"><h2>Apple Calendar</h2><p>Sync deadlines to a separate Google calendar, then enable that Google account in Apple Calendar on your iPhone.</p><p>Permission is limited to calendars created by this app. Amounts and private notes are excluded.</p><label>Event privacy<select id="calendarPrivacy"><option value="generic">Work deadline — hide task titles</option><option value="titles">Show task titles</option></select></label><div class="security-actions"><button class="primary" id="calendarConsent">Allow Calendar access</button><button class="team-secondary" id="calendarConnect">Connect / update privacy</button><button class="team-secondary" id="calendarSync">Sync now</button><button class="team-secondary" id="calendarDisconnect">Stop syncing</button></div><p id="calendarStatus" role="status">Calendar access requires your separate Google consent.</p><p>On iPhone: Settings → Apps → Calendar → Calendar Accounts → Add Account → Google. Enable Calendars, then select Fortor’s Dashboard · Deadlines.</p></section>':'');loadDevicePreference();$('loadSessions').onclick=async()=>{try{const result=await cloudRequest('/api/sessions');$('sessionList').innerHTML=result.sessions.map(s=>'<article class="security-row"><span>'+esc(s.id===result.current?'This session':s.userAgent||'Other device')+(s.rememberedUntil?' · remembered until '+new Date(s.rememberedUntil).toLocaleDateString():' · 30-minute idle lock')+'</span><button data-revoke-session="'+esc(s.id)+'">Sign out</button></article>').join('');}catch(e){toast(e.message);}};$('sessionList').onclick=async e=>{const id=e.target.dataset.revokeSession;if(id){await cloudRequest('/api/sessions/'+encodeURIComponent(id),'DELETE');e.target.closest('article').remove();}};
- if(!cloud.base.isOwner)return;$('calendarConsent').onclick=async()=>{try{const response=await fetch('/api/auth/sign-in/social',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'google',callbackURL:'/','scopes':['https://www.googleapis.com/auth/calendar.app.created'],requestSignUp:false})});const result=await response.json();if(!response.ok||!result.url||new URL(result.url).hostname!=='accounts.google.com')throw Error('Could not start Calendar consent');location.assign(result.url);}catch(e){$('calendarStatus').textContent=e.message;}};
+ if(!cloud.base.isOwner)return;renderSheetsConnection();$('calendarConsent').onclick=async()=>{try{const response=await fetch('/api/auth/sign-in/social',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'google',callbackURL:'/','scopes':['https://www.googleapis.com/auth/calendar.app.created'],requestSignUp:false})});const result=await response.json();if(!response.ok||!result.url||new URL(result.url).hostname!=='accounts.google.com')throw Error('Could not start Calendar consent');location.assign(result.url);}catch(e){$('calendarStatus').textContent=e.message;}};
  for(const [id,url,method] of [['calendarConnect','/api/calendar/connect','POST'],['calendarSync','/api/calendar/sync','POST'],['calendarDisconnect','/api/calendar','DELETE']])$(id).onclick=async()=>{try{const result=await cloudRequest(url,method,{detail:$('calendarPrivacy').value});$('calendarStatus').textContent=result?.connected?'Calendar synced. Apple Calendar controls its own refresh timing.':'Sync stopped. Existing events remain in Google Calendar.';}catch(e){$('calendarStatus').textContent=e.message;}};cloudRequest('/api/calendar').then(({connection:c})=>{if(c){$('calendarPrivacy').value=c.detail;$('calendarStatus').textContent=c.last_error?'Last sync failed. Try Sync now.':c.enabled?'Connected · '+(c.last_synced_at?'last synced '+new Date(c.last_synced_at).toLocaleString():'not synced yet'):'Sync stopped.';}}).catch(e=>$('calendarStatus').textContent=e.message);}
 render();syncLabel('Synced · Private');
 window.cloudReady=true;
@@ -43,3 +43,37 @@ window.cloudReady=true;
 
 // This is a per-tab UI preference, never an authentication token. Credentials remain HttpOnly.
 try{const preference=sessionStorage.getItem('fortor.remember.request');if(preference==='yes')cloudRequest('/api/session/remember','POST',{remember:true}).then(()=>{sessionStorage.removeItem('fortor.remember.request');toast('This device is remembered for up to 30 days.');}).catch(()=>toast('Remember device was not saved. Enable it in Security.'));else if(preference==='no')sessionStorage.removeItem('fortor.remember.request');}catch{}
+
+function renderSheetsConnection() {
+ const panel = document.createElement('section');
+ panel.className = 'panel security-card';
+ panel.innerHTML = '<h2>Google Sheets</h2><p>Send personal tasks, clients, dates, statuses and amounts to a new Google Sheet. The All tab and work-type tabs update after saving. Managed tabs are rebuilt from your dashboard.</p><div class="security-actions"><button type="button" class="team-secondary" data-action="authorize">Allow Sheets access</button><button type="button" class="primary" data-action="connect">Create / connect sheet</button><button type="button" class="team-secondary" data-action="sync">Sync now</button><button type="button" class="team-secondary" data-action="disconnect">Stop syncing</button></div><p role="status">Checking connection…</p><a hidden target="_blank" rel="noopener noreferrer">Open Google Sheet ↗</a>';
+ $('securityPanel').append(panel);
+ const status = panel.querySelector('[role=status]');
+ const link = panel.querySelector('a');
+ const buttons = Array.from(panel.querySelectorAll('button'));
+ function show(connection) {
+  const id = connection?.spreadsheet_id;
+  link.hidden = !id;
+  if (id) link.href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(id) + '/edit';
+  status.textContent = !connection ? 'Not connected.' : !connection.enabled ? 'Sync stopped.' : connection.last_error || (connection.last_synced_at ? 'Last synced ' + new Date(connection.last_synced_at).toLocaleString() : 'Connected.');
+ }
+ cloudRequest('/api/sheets').then(result => show(result.connection)).catch(error => {status.textContent = error.message;});
+ panel.onclick = async event => {
+  const action = event.target.closest('button')?.dataset.action;
+  if (!action) return;
+  buttons.forEach(button => {button.disabled = true;});
+  try {
+   if (action === 'authorize') {
+    const response = await fetch('/api/auth/sign-in/social',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'google',callbackURL:'/',scopes:['https://www.googleapis.com/auth/drive.file'],additionalParams:{prompt:'select_account consent',access_type:'offline'},requestSignUp:false})});
+    const result = await response.json();
+    if (!response.ok || !result.url || new URL(result.url).origin !== 'https://accounts.google.com') throw Error('Could not start Sheets consent.');
+    location.assign(result.url);
+    return;
+   }
+   if (action === 'disconnect') {await cloudRequest('/api/sheets','DELETE');show((await cloudRequest('/api/sheets')).connection);}
+   else show((await cloudRequest('/api/sheets/' + action,'POST',{})).connection);
+  } catch (error) {status.textContent = error.message;}
+  finally {buttons.forEach(button => {button.disabled = false;});}
+ };
+}

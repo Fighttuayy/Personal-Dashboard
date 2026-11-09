@@ -19,14 +19,15 @@ export function calendarEvent(task,detail='generic'){
  return {id:'f'+digest(String(task.id)).slice(0,40),summary:detail==='titles'?String(task.name).slice(0,150):'Work deadline',start:{date:task.due},end:{date:nextDate(task.due)},transparency:'transparent',extendedProperties:{private:{fortor:'dashboard-v2'}}};
 }
 function nextDate(value){const date=new Date(value+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+1);return date.toISOString().slice(0,10);}
+export const SHEETS_SCOPE='https://www.googleapis.com/auth/drive.file';
 export const CALENDAR_SCOPE='https://www.googleapis.com/auth/calendar.app.created';
 
 export function googlePermissionRequest(body){
  const scopes=body.scopes||[];
  if(!Array.isArray(scopes)||scopes.some(scope=>typeof scope!=='string'))throw new HttpError(400,'Invalid permission request.');
- if(scopes.some(scope=>!['openid','email','profile',CALENDAR_SCOPE].includes(scope)))throw new HttpError(403,'Unapproved permission scope.');
+ if(scopes.some(scope=>!['openid','email','profile',CALENDAR_SCOPE,SHEETS_SCOPE].includes(scope)))throw new HttpError(403,'Unapproved permission scope.');
  const extra=body.additionalParams||{};
  if(typeof extra!=='object'||Array.isArray(extra)||Object.keys(extra).some(key=>!['prompt','access_type'].includes(key)))throw new HttpError(403,'Unapproved authorization parameter.');
- if(Object.keys(extra).length&&(!scopes.includes(CALENDAR_SCOPE)||extra.prompt!=='select_account consent'||extra.access_type!=='offline'))throw new HttpError(403,'Additional permissions require the Calendar connection flow.');
+ if(Object.keys(extra).length&&(!(scopes.includes(CALENDAR_SCOPE)||scopes.includes(SHEETS_SCOPE))||extra.prompt!=='select_account consent'||extra.access_type!=='offline'))throw new HttpError(403,'Additional permissions require the Google connection flow.');
  return scopes;
 }
