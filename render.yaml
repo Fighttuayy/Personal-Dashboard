@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: fortors-private-dashboard
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: private-app
+    buildCommand: npx --yes pnpm@11.25.0 install --frozen-lockfile --prod
+    startCommand: node server/index.mjs
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: APP_ORIGIN
+        sync: false
+      - key: OWNER_GOOGLE_EMAIL
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+# Free service is for setup/acceptance testing. Choose production uptime/backups separately.
+# Database is external and must use the restricted fortor_runtime role with verified TLS.
