@@ -36,5 +36,10 @@ export function createAuthentication(pool,repo,config){
   },after:async session=>repo.registerSession(session.id)}}},
   logger:{level:'error'}
  });
- return {auth,getSession:req=>auth.api.getSession({headers:fromNodeHeaders(req.headers),query:{disableCookieCache:true}})};
+ async function getGoogleCredentials(userId){
+  const {rows}=await pool.query('select id from public.account where "userId"=$1 and "providerId"=$2 limit 2',[userId,'google']);
+  if(rows.length!==1)return null;
+  return auth.api.getAccessToken({body:{accountId:rows[0].id,userId}});
+ }
+ return {auth,getGoogleCredentials,getSession:req=>auth.api.getSession({headers:fromNodeHeaders(req.headers),query:{disableCookieCache:true}})};
 }

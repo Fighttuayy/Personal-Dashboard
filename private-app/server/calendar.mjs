@@ -1,8 +1,8 @@
 import {calendarEvent,HttpError} from './security.mjs';
 const root='https://www.googleapis.com/calendar/v3';
-export function calendarService({repo,auth,fetchImpl=fetch}){
+export function calendarService({repo,getGoogleCredentials,fetchImpl=fetch}){
  async function request(userId,path,method='GET',body){
-  const credentials=await auth.api.getAccessToken({body:{providerId:'google',userId}});
+  const credentials=await getGoogleCredentials(userId);
   if(!credentials?.accessToken)throw new HttpError(409,'Connect your Google calendar first.');
   const response=await fetchImpl(root+path,{method,headers:{Authorization:'Bearer '+credentials.accessToken,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(15000)});
   if(response.status===401||response.status===403)throw new HttpError(409,'Calendar permission is missing or expired. Connect again.','calendar_permission');

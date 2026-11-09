@@ -47,7 +47,7 @@ export function sheetUpdates(snapshot, existing) {
  return requests;
 }
 
-export function sheetsService({repo,auth,fetchImpl=fetch}) {
+export function sheetsService({repo,getGoogleCredentials,fetchImpl=fetch}) {
  const queues = new Map();
  function run(userId, work) {
   const previous = queues.get(userId) || Promise.resolve();
@@ -56,7 +56,7 @@ export function sheetsService({repo,auth,fetchImpl=fetch}) {
   return next.finally(()=>{if(queues.get(userId)===next)queues.delete(userId);});
  }
  async function token(userId) {
-  const result = await auth.api.getAccessToken({body:{providerId:'google',userId}}).catch(()=>null);
+  const result = await getGoogleCredentials(userId).catch(()=>null);
   // The Google API checks the live token. Sign-in does not refresh Better Auth’s stored scope list.
   if (!result?.accessToken) throw new HttpError(409,'Allow Google Sheets access first.','sheets_permission');
   return result.accessToken;
