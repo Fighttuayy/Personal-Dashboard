@@ -106,8 +106,9 @@ function render(){syncCategoryControls();applyTheme();$('categoryFilter').value=
  $('stats').innerHTML=cards.map(([label,value,unit,symbol,netBase])=>`<div class="stat"><div class="stat-top">${label}<span>${icon(symbol)}</span></div><strong>${value}<em>${unit}</em></strong>${netBase===undefined?'':deductionNote(netBase)}</div>`).join('');
  const paidTasks = renderIncomeChart(finance);
  const isIncome = view === 'income';
- const tableTasks = isIncome ? paidTasks : scoped;
- $('taskDateHeading').textContent = isIncome ? 'Payment date' : 'Due date';
+ const outstandingTasks = scoped.filter(t => t.amount > t.paid);
+ const tableTasks = isIncome ? [...outstandingTasks, ...paidTasks.filter(t => t.paid >= t.amount)] : scoped;
+ $('taskDateHeading').textContent = isIncome ? 'Payment / due date' : 'Due date';
  $('deadlines').innerHTML=active.sort((a,b)=>a.due.localeCompare(b.due)).slice(0,3).map(t=>{let d=new Date(t.due+'T00:00:00'),n=days(t.due);return `<div class="deadline" role="button" tabindex="0" data-id="${t.id}"><div class="date-box"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-GB',{month:'short'})}</small></div><div class="deadline-info"><b>${esc(t.name)}</b><small>${esc(t.client||'Personal project')}</small></div><span class="days ${n<=2?'urgent':''}">${n<0?-n+'d overdue':n===0?'Today':n===1?'Tomorrow':'In '+n+'d'}</span></div>`}).join('')||'<div class="empty">No upcoming deadlines</div>';
  $('overview').classList.toggle('hidden',view!=='overview'&&view!=='income');$('workPanel').classList.toggle('hidden',view==='calendar');$('calendarPanel').classList.toggle('hidden',view!=='calendar');
  const mode=view==='overview'?state.dashboardMode:'standard';
@@ -118,8 +119,13 @@ function render(){syncCategoryControls();applyTheme();$('categoryFilter').value=
  $('standardTable').classList.toggle('hidden',mode!=='standard');$('todoView').classList.toggle('hidden',mode!=='todo');$('boardView').classList.toggle('hidden',mode!=='board');$('workPanel').classList.toggle('board-view',mode==='board');
  document.body.classList.toggle('layout-todo',view==='overview'&&mode==='todo');document.body.classList.toggle('layout-board',view==='overview'&&mode==='board');
  document.querySelectorAll('[data-layout]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layout===mode)));
- const q=$('search').value.toLowerCase(),filter=$('filter').value;const rows=tableTasks.filter(t=>(t.name+' '+t.client).toLowerCase().includes(q)&&(filter==='all'||t.status===filter)).sort(isIncome ? (a,b)=>b.paidDate.localeCompare(a.paidDate) : (a,b)=>(a.status==='เสร็จแล้ว')-(b.status==='เสร็จแล้ว')||a.due.localeCompare(b.due));
- $('taskRows').innerHTML=rows.map(t=>`<tr data-id="${t.id}" tabindex="0" aria-label="Edit ${esc(t.name)}"><td><span class="task-name">${esc(t.name)}</span><span class="task-client">${esc(t.client||'Personal project')}</span></td><td>${typeBadge(t)}</td><td>${statusSelect(t)}</td><td class="${!isIncome&&days(t.due)<0&&t.status!=='เสร็จแล้ว'?'overdue':''}">${dateLabel(isIncome ? t.paidDate : t.due)}</td><td class="money">฿${money(t.amount)}</td><td class="paid">฿${money(t.paid)}</td><td class="row-arrow">↗</td></tr>`).join('')||'<tr><td colspan="7" class="empty">No tasks found</td></tr>';$('rowCount').textContent=`${rows.length} / ${tableTasks.length}`;renderFocusViews(rows,mode);renderCalendar();if(typeof refreshSelects==='function')refreshSelects();}
+ const incomeOrder = (a,b) => {
+  const aDue = a.amount > a.paid, bDue = b.amount > b.paid;
+  if (aDue !== bDue) return Number(bDue) - Number(aDue);
+  return aDue ? a.due.localeCompare(b.due) : b.paidDate.localeCompare(a.paidDate);
+ };
+ const q=$('search').value.toLowerCase(),filter=$('filter').value;const rows=tableTasks.filter(t=>(t.name+' '+t.client).toLowerCase().includes(q)&&(filter==='all'||t.status===filter)).sort(isIncome ? incomeOrder : (a,b)=>(a.status==='เสร็จแล้ว')-(b.status==='เสร็จแล้ว')||a.due.localeCompare(b.due));
+ $('taskRows').innerHTML=rows.map(t=>`<tr data-id="${t.id}" tabindex="0" aria-label="Edit ${esc(t.name)}"><td><span class="task-name">${esc(t.name)}</span><span class="task-client">${esc(t.client||'Personal project')}</span></td><td>${typeBadge(t)}</td><td>${statusSelect(t)}</td><td class="${!isIncome&&days(t.due)<0&&t.status!=='เสร็จแล้ว'?'overdue':''}">${dateLabel(isIncome && t.amount <= t.paid ? t.paidDate : t.due)}</td><td class="money">฿${money(t.amount)}</td><td class="paid">฿${money(t.paid)}${isIncome ? '<span class="task-client">' + (t.amount > t.paid ? '฿' + money(t.amount - t.paid) + ' outstanding' : 'Paid in full') + '</span>' : ''}</td><td class="row-arrow">↗</td></tr>`).join('')||'<tr><td colspan="7" class="empty">No tasks found</td></tr>';$('rowCount').textContent=`${rows.length} / ${tableTasks.length}`;renderFocusViews(rows,mode);renderCalendar();if(typeof refreshSelects==='function')refreshSelects();}
 function badge(status){return `<span class="badge ${{'กำลังทำ':'progress','รอตรวจ':'review','เสร็จแล้ว':'done'}[status]||''}">${statusLabels[status]||esc(status)}</span>`;}
 function renderFocusViews(rows,mode){
  if(mode==='todo'){
@@ -133,9 +139,64 @@ function animateView(){const target=$('workPanel');target.classList.remove('view
 function setLayout(mode){if(!['standard','todo','board','display'].includes(mode))return;state.dashboardMode=mode;save();render();animateView();}
 function changeTaskStatus(id,status){const t=state.tasks.find(t=>t.id===id);if(!t||!statuses.includes(status))return;if(status==='เสร็จแล้ว'&&t.status!=='เสร็จแล้ว')t.previousStatus=t.status;t.status=status;save();render();}
 function renderCalendar(){let y=calendarDate.getFullYear(),m=calendarDate.getMonth(),first=new Date(y,m,1).getDay(),count=new Date(y,m+1,0).getDate();$('monthTitle').textContent=calendarDate.toLocaleDateString('en-GB',{month:'long',year:'numeric'});let html=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="weekday">${d}</div>`).join('');for(let i=0;i<Math.ceil((first+count)/7)*7;i++){let day=i-first+1;if(day<1||day>count){html+='<div class="cal-day"></div>';continue}let date=iso(new Date(y,m,day));html+=`<div class="cal-day ${date===today?'today':''}"><span>${day}</span>${scopedTasks().filter(t=>t.due===date).map(t=>`<button class="cal-task" style="${categoryStyle(t.category)}" data-id="${t.id}" title="${esc(t.name)}">${esc(t.name)}</button>`).join('')}</div>`}$('calendar').innerHTML=html;$('calendarLegend').innerHTML=state.categories.filter(c=>state.categoryFilter==='all'||c.id===state.categoryFilter).map(c=>typeBadge({category:c.id})).join('');}
-function openEditor(id){editing=id||null;const t=state.tasks.find(x=>x.id===id);$('taskForm').reset();$('paid').setCustomValidity('');$('paidDate').setCustomValidity('');$('modalTitle').textContent=t?'Task details':'New task';for(const key of ['name','client','category','due','status','amount','paid','paidDate','notes'])$(key).value=t?t[key]:(key==='category'?state.categories[0].id:key==='due'?today:key==='status'?'ยังไม่เริ่ม':['amount','paid'].includes(key)?0:'');$('delete').classList.toggle('hidden',!t);$('editor').showModal();if(typeof refreshSelects==='function')refreshSelects();}
-$('taskForm').addEventListener('submit',e=>{e.preventDefault();const amount=Number($('amount').value),paid=Number($('paid').value),name=$('name').value.trim();if(!name){$('name').focus();return}if(!Number.isFinite(amount)||!Number.isFinite(paid)||amount<0||paid<0||amount>1e12){$('paid').setCustomValidity('Enter valid, non-negative amounts.');$('paid').reportValidity();return}if(paid>amount){$('paid').setCustomValidity('Received amount cannot exceed project value.');$('paid').reportValidity();return}if(paid>0&&!$('paidDate').value){$('paidDate').setCustomValidity('Choose a payment date.');$('paidDate').reportValidity();return}const t={...(state.tasks.find(t=>t.id===editing)||{}),id:editing||crypto.randomUUID(),name,category:categoryLabels[$('category').value]?$('category').value:state.categories[0].id,client:$('client').value.trim(),due:$('due').value,status:$('status').value,amount,paid,paidDate:paid>0?$('paidDate').value:'',notes:$('notes').value};if(editing)state.tasks=state.tasks.map(x=>x.id===editing?t:x);else state.tasks.push(t);save();$('editor').close();render();if(storageAvailable)toast('Task saved');});
-for(const id of ['paid','amount','paidDate'])$(id).addEventListener('input',()=>{$('paid').setCustomValidity('');$('paidDate').setCustomValidity('')});
+function updatePaymentFields() {
+ const task = state.tasks.find(t => t.id === editing);
+ const partial = task && task.paid > 0 && task.paid < task.amount;
+ const fullyPaid = $('paid').checked && Number($('amount').value) > 0;
+ $('paymentDateField').hidden = !fullyPaid;
+ $('paidDate').required = fullyPaid;
+ $('paidDate').disabled = !fullyPaid;
+ if (fullyPaid && !$('paidDate').value) $('paidDate').value = today;
+ $('partialPaymentNote').hidden = !partial || fullyPaid;
+ $('partialPaymentNote').textContent = partial ? 'Previously received: ฿' + money(task.paid) + '. Mark paid in full when the balance arrives.' : '';
+ $('amount').setCustomValidity('');
+}
+function openEditor(id) {
+ editing = id || null;
+ const task = state.tasks.find(t => t.id === id);
+ $('taskForm').reset();
+ $('modalTitle').textContent = task ? 'Task details' : 'New task';
+ const defaults = {category:state.categories[0].id,due:today,status:'ยังไม่เริ่ม',amount:0};
+ for (const key of ['name','client','category','due','status','amount','paidDate','notes']) $(key).value = task?.[key] ?? defaults[key] ?? '';
+ $('paid').checked = Boolean(task && task.amount > 0 && task.paid >= task.amount);
+ updatePaymentFields();
+ $('delete').classList.toggle('hidden', !task);
+ $('editor').showModal();
+ if (typeof refreshSelects === 'function') refreshSelects();
+}
+$('paid').addEventListener('change', () => {
+ const task = state.tasks.find(t => t.id === editing);
+ if ($('paid').checked && task?.paid > 0 && task.paid < task.amount) $('paidDate').value = today;
+ updatePaymentFields();
+});
+$('amount').addEventListener('input', updatePaymentFields);
+$('taskForm').addEventListener('submit', event => {
+ event.preventDefault();
+ const previous = state.tasks.find(t => t.id === editing);
+ const amount = Number($('amount').value), name = $('name').value.trim();
+ if (!name) { $('name').focus(); return; }
+ const partial = previous && previous.paid > 0 && previous.paid < previous.amount ? previous.paid : 0;
+ const fullyPaid = $('paid').checked && amount > 0;
+ const paid = fullyPaid ? amount : partial;
+ if (!Number.isFinite(amount) || amount < paid || amount > 1e12) {
+  $('amount').setCustomValidity('Enter a valid project value at least as large as the amount already received.');
+  $('amount').reportValidity();
+  return;
+ }
+ const task = {
+  ...previous, id:editing || crypto.randomUUID(), name,
+  category:categoryLabels[$('category').value] ? $('category').value : state.categories[0].id,
+  client:$('client').value.trim(), due:$('due').value, status:$('status').value,
+  amount, paid, paidDate:fullyPaid ? $('paidDate').value : partial ? previous.paidDate : '',
+  notes:$('notes').value
+ };
+ if (editing) state.tasks = state.tasks.map(t => t.id === editing ? task : t);
+ else state.tasks.push(task);
+ save();
+ $('editor').close();
+ render();
+ if (storageAvailable) toast('Task saved');
+});
 $('add').onclick=()=>openEditor();$('close').onclick=()=>$('editor').close();$('delete').onclick=()=>{if(!confirm('Delete this task and its payment details?'))return;state.tasks=state.tasks.filter(t=>t.id!==editing);save();$('editor').close();render();toast('Task deleted')};
 let themeTransition=null;
 $('theme').onclick=()=>{if(themeTransition)return;const change=()=>{state.theme=state.theme==='light'?'dark':'light';applyTheme();save();};if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&typeof document.startViewTransition==='function'){themeTransition=document.startViewTransition(change);themeTransition.finished.catch(()=>{}).finally(()=>{themeTransition=null;});}else{change();if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.body.classList.remove('theme-fading');void document.body.offsetWidth;document.body.classList.add('theme-fading');setTimeout(()=>document.body.classList.remove('theme-fading'),450);}}};
