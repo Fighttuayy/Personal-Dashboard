@@ -47,10 +47,13 @@ body.has-liquid-bg.display-focus #displayView{background:transparent}
 @media(max-width:650px){.liquid-field{filter:blur(32px)}}
 @media(prefers-reduced-motion:reduce){.liquid-field{animation:none;will-change:auto}.workspace-background,.workspace-background-shade{transition:none}}
 
-/* Keep the period controls within the Income card at narrow widths. */
+/* Let the Income controls wrap inside the header padding. */
 .revenue{min-width:0}
-.revenue .control-incomePeriod{width:auto;min-width:0;font-size:13px}
+.revenue .panel-heading,.income-controls{flex-wrap:wrap}
+.income-controls{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%}
+.income-controls .custom-select-trigger{width:auto;min-width:0;max-width:100%;font-size:13px}
 #incomeRange{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:0 25px 16px}
+#incomeRange[hidden]{display:none}
 #incomeRange label{display:grid;gap:5px;font-size:12px;color:var(--muted)}
 #incomeRange input{width:143px;max-width:100%;padding:7px 8px}
 #incomeRange button{min-height:36px}
