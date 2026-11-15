@@ -45,7 +45,31 @@ function incomeMonthIndex(value) {
  return Number(value.slice(0, 4)) * 12 + Number(value.slice(5, 7)) - 1;
 }
 
-function renderIncomeChart(tasks) {
+const incomeModes = {
+ all:'Received + expected',
+ received:'Received',
+ outstanding:'All unpaid',
+ awaiting:'Completed · awaiting payment',
+ unfinished:'Unfinished · unpaid'
+};
+
+function incomeEntries(tasks, mode) {
+ const entries = [];
+ for (const task of tasks) {
+  if ((mode === 'all' || mode === 'received') && task.paid > 0) {
+   entries.push({task, date:task.paidDate, amount:task.paid, received:true});
+  }
+  const balance = task.amount - task.paid;
+  const done = task.status === 'เสร็จแล้ว';
+  if (balance > 0 && (mode === 'all' || mode === 'outstanding' ||
+   (mode === 'awaiting' && done) || (mode === 'unfinished' && !done))) {
+   entries.push({task, date:task.due, amount:balance, received:false});
+  }
+ }
+ return entries;
+}
+
+function renderIncomeChart(tasks, mode) {
  const period = $('incomePeriod').value;
  const ranges = {
   year: [now.getFullYear() * 12, now.getFullYear() * 12 + 11],
@@ -56,14 +80,12 @@ function renderIncomeChart(tasks) {
  const [start, end] = ranges[period] || ranges.six;
  const step = Math.ceil((end - start + 1) / 12);
  const values = Array(Math.ceil((end - start + 1) / step)).fill(0);
- const paidTasks = tasks.filter(task => {
-  const month = incomeMonthIndex(task.paidDate?.slice(0, 7) || '');
-  return task.paid > 0 && month >= start && month <= end;
+ const entries = incomeEntries(tasks, mode).filter(entry => {
+  const month = incomeMonthIndex(entry.date?.slice(0, 7) || '');
+  if (!(month >= start && month <= end)) return false;
+  values[Math.floor((month - start) / step)] += entry.amount;
+  return true;
  });
- for (const task of paidTasks) {
-  const month = incomeMonthIndex(task.paidDate.slice(0, 7));
-  values[Math.floor((month - start) / step)] += task.paid;
- }
  const max = Math.max(...values, 1);
  const showYear = Math.floor(start / 12) !== Math.floor(end / 12);
  const monthLabel = (index, year) => new Date(incomeMonthKey(index) + '-01T12:00:00')
@@ -80,12 +102,14 @@ function renderIncomeChart(tasks) {
  $('incomeRange').hidden = period !== 'custom';
  $('incomeGrouping').hidden = step === 1;
  $('incomeGrouping').textContent = 'Bars group up to ' + step + ' months each.';
- return paidTasks;
+ $('incomeLegend').textContent = incomeModes[mode];
+ return entries;
 }
 
 $('incomeFrom').value = incomeMonthKey(customIncomeRange[0]);
 $('incomeTo').value = incomeMonthKey(customIncomeRange[1]);
 $('incomePeriod').onchange = () => render();
+$('incomeMode').onchange = () => render();
 $('incomeRange').oninput = () => $('incomeTo').setCustomValidity('');
 $('incomeRange').onsubmit = event => {
  event.preventDefault();
@@ -104,10 +128,15 @@ function render(){syncCategoryControls();applyTheme();$('categoryFilter').value=
  const active=scoped.filter(t=>t.status!=='เสร็จแล้ว'),currentMonth=today.slice(0,7),received=finance.filter(t=>t.paidDate?.startsWith(currentMonth)).reduce((a,t)=>a+t.paid,0),outstanding=finance.reduce((a,t)=>a+Math.max(0,t.amount-t.paid),0);
  const cards=[['Open tasks',active.length,'tasks','tasks'],['Due this week',active.filter(t=>days(t.due)>=0&&days(t.due)<=7).length,'tasks','calendar'],['Received this month','฿'+money(received),'','income',received],['Outstanding','฿'+money(outstanding),'','income',outstanding]];
  $('stats').innerHTML=cards.map(([label,value,unit,symbol,netBase])=>`<div class="stat"><div class="stat-top">${label}<span>${icon(symbol)}</span></div><strong>${value}<em>${unit}</em></strong>${netBase===undefined?'':deductionNote(netBase)}</div>`).join('');
- const paidTasks = renderIncomeChart(finance);
  const isIncome = view === 'income';
- const outstandingTasks = scoped.filter(t => t.amount > t.paid);
- const tableTasks = isIncome ? [...outstandingTasks, ...paidTasks.filter(t => t.paid >= t.amount)] : scoped;
+ $('incomeModeControl').hidden = !isIncome;
+ const entries = renderIncomeChart(finance, isIncome ? $('incomeMode').value : 'received');
+ // A partial payment can contribute both amounts. Prefer the due date for the single task row.
+ const incomeRows = new Map(entries.map(entry=>[entry.task.id,entry]));
+ const tableTasks = isIncome ? [...incomeRows.values()].sort((a,b)=>
+  Number(a.received)-Number(b.received) ||
+  (a.received ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date))
+ ).map(entry=>entry.task) : scoped;
  $('taskDateHeading').textContent = isIncome ? 'Payment / due date' : 'Due date';
  $('deadlines').innerHTML=active.sort((a,b)=>a.due.localeCompare(b.due)).slice(0,3).map(t=>{let d=new Date(t.due+'T00:00:00'),n=days(t.due);return `<div class="deadline" role="button" tabindex="0" data-id="${t.id}"><div class="date-box"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-GB',{month:'short'})}</small></div><div class="deadline-info"><b>${esc(t.name)}</b><small>${esc(t.client||'Personal project')}</small></div><span class="days ${n<=2?'urgent':''}">${n<0?-n+'d overdue':n===0?'Today':n===1?'Tomorrow':'In '+n+'d'}</span></div>`}).join('')||'<div class="empty">No upcoming deadlines</div>';
  $('overview').classList.toggle('hidden',view!=='overview'&&view!=='income');$('workPanel').classList.toggle('hidden',view==='calendar');$('calendarPanel').classList.toggle('hidden',view!=='calendar');
@@ -119,13 +148,9 @@ function render(){syncCategoryControls();applyTheme();$('categoryFilter').value=
  $('standardTable').classList.toggle('hidden',mode!=='standard');$('todoView').classList.toggle('hidden',mode!=='todo');$('boardView').classList.toggle('hidden',mode!=='board');$('workPanel').classList.toggle('board-view',mode==='board');
  document.body.classList.toggle('layout-todo',view==='overview'&&mode==='todo');document.body.classList.toggle('layout-board',view==='overview'&&mode==='board');
  document.querySelectorAll('[data-layout]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layout===mode)));
- const incomeOrder = (a,b) => {
-  const aDue = a.amount > a.paid, bDue = b.amount > b.paid;
-  if (aDue !== bDue) return Number(bDue) - Number(aDue);
-  return aDue ? a.due.localeCompare(b.due) : b.paidDate.localeCompare(a.paidDate);
- };
- const q=$('search').value.toLowerCase(),filter=$('filter').value;const rows=tableTasks.filter(t=>(t.name+' '+t.client).toLowerCase().includes(q)&&(filter==='all'||t.status===filter)).sort(isIncome ? incomeOrder : (a,b)=>(a.status==='เสร็จแล้ว')-(b.status==='เสร็จแล้ว')||a.due.localeCompare(b.due));
- $('taskRows').innerHTML=rows.map(t=>`<tr data-id="${t.id}" tabindex="0" aria-label="Edit ${esc(t.name)}"><td><span class="task-name">${esc(t.name)}</span><span class="task-client">${esc(t.client||'Personal project')}</span></td><td>${typeBadge(t)}</td><td>${statusSelect(t)}</td><td class="${!isIncome&&days(t.due)<0&&t.status!=='เสร็จแล้ว'?'overdue':''}">${dateLabel(isIncome && t.amount <= t.paid ? t.paidDate : t.due)}</td><td class="money">฿${money(t.amount)}</td><td class="paid">฿${money(t.paid)}${isIncome ? '<span class="task-client">' + (t.amount > t.paid ? '฿' + money(t.amount - t.paid) + ' outstanding' : 'Paid in full') + '</span>' : ''}</td><td class="row-arrow">↗</td></tr>`).join('')||'<tr><td colspan="7" class="empty">No tasks found</td></tr>';$('rowCount').textContent=`${rows.length} / ${tableTasks.length}`;renderFocusViews(rows,mode);renderCalendar();if(typeof refreshSelects==='function')refreshSelects();}
+ const q=$('search').value.toLowerCase(),filter=$('filter').value;const rows=tableTasks.filter(t=>(t.name+' '+t.client).toLowerCase().includes(q)&&(filter==='all'||t.status===filter));
+ if (!isIncome) rows.sort((a,b)=>(a.status==='เสร็จแล้ว')-(b.status==='เสร็จแล้ว')||a.due.localeCompare(b.due));
+ $('taskRows').innerHTML=rows.map(t=>`<tr data-id="${t.id}" tabindex="0" aria-label="Edit ${esc(t.name)}"><td><span class="task-name">${esc(t.name)}</span><span class="task-client">${esc(t.client||'Personal project')}</span></td><td>${typeBadge(t)}</td><td>${statusSelect(t)}</td><td class="${!isIncome&&days(t.due)<0&&t.status!=='เสร็จแล้ว'?'overdue':''}">${dateLabel(isIncome ? incomeRows.get(t.id).date : t.due)}</td><td class="money">฿${money(t.amount)}</td><td class="paid">฿${money(t.paid)}${isIncome ? '<span class="task-client">' + (t.amount > t.paid ? '฿' + money(t.amount - t.paid) + ' outstanding' : 'Paid in full') + '</span>' : ''}</td><td class="row-arrow">↗</td></tr>`).join('')||'<tr><td colspan="7" class="empty">No tasks found</td></tr>';$('rowCount').textContent=`${rows.length} / ${tableTasks.length}`;renderFocusViews(rows,mode);renderCalendar();if(typeof refreshSelects==='function')refreshSelects();}
 function badge(status){return `<span class="badge ${{'กำลังทำ':'progress','รอตรวจ':'review','เสร็จแล้ว':'done'}[status]||''}">${statusLabels[status]||esc(status)}</span>`;}
 function renderFocusViews(rows,mode){
  if(mode==='todo'){
