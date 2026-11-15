@@ -68,6 +68,13 @@ label input,label select,label textarea{font-size:15px;padding:12px}
 .storage-hint{font-size:12px}
 .theme-button{font-size:14px}
 .cal-task{font-size:12px;white-space:normal;line-height:1.6}
+.cal-milestone::before{content:'↳ ';opacity:.8}
+.task-schedule{min-width:0;margin:16px 0;padding:12px;border:1px solid var(--border);border-radius:12px}
+.task-schedule legend{padding:0 6px;font-weight:700}
+.task-milestone{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,145px) auto;align-items:end;gap:8px;margin-bottom:10px}
+.task-milestone label{min-width:0;margin:0}
+.task-milestone input{min-width:0;width:100%}
+@media(max-width:420px){.task-milestone{grid-template-columns:minmax(0,1fr) auto}.task-milestone label:first-child{grid-column:1/-1}}
 .cal-day{min-height:120px}
 .cal-day>span,.weekday{font-size:13px}
 

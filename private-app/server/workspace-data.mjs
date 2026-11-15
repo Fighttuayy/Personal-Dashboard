@@ -19,6 +19,12 @@ function workspaceTimestamp(value){if(value==null)return new Date().toISOString(
 function workspaceAmount(value){if(!['number','string'].includes(typeof value)||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>1e12)throw Error('A payment amount is invalid.');return Number(value);}
 function workspaceUnique(items){const ids=new Set();for(const item of items){if(ids.has(item.id))throw Error('This backup contains duplicate record IDs.');ids.add(item.id);}return items;}
 function workspaceLink(value){try{const url=new URL(value);if(!['https:','http:'].includes(url.protocol)||url.username||url.password)throw Error();return url.href;}catch(e){throw Error('A team link is invalid. Use an http or https URL.');}}
+const MAX_TASK_MILESTONES=50;
+function taskCalendarEntries(task){
+ return [task,...(task.milestones||[]).map(milestone=>({
+  ...task, due:milestone.due, name:milestone.name+' · '+task.name, milestoneId:milestone.id
+ }))];
+}
 function normalizeWorkspace(raw){
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||!Array.isArray(raw.tasks))throw Error('Choose a Fortor dashboard JSON backup.');
  if(raw.schemaVersion!=null&&raw.schemaVersion!==1)throw Error('This backup needs a newer version of the dashboard.');
@@ -33,6 +39,10 @@ function normalizeWorkspace(raw){
   const task={id:workspaceId(t.id),name:workspaceText(t.name,150,true),client:workspaceText(t.client,100),category,due:workspaceDate(t.due),status:workspaceStatus(t.status),amount,paid,paidDate:workspaceDate(t.paidDate,true),notes:workspaceText(t.notes,100000)};
   if(paid>0&&!task.paidDate)throw Error('A paid task is missing its payment date.');
   if(t.previousStatus!=null)task.previousStatus=workspaceStatus(t.previousStatus);
+  const milestones=workspaceUnique(workspaceList(t.milestones,MAX_TASK_MILESTONES).map(item=>({
+   id:workspaceId(item?.id),name:workspaceText(item?.name,100,true).trim(),due:workspaceDate(item?.due)
+  })));
+  if(milestones.length)task.milestones=milestones;
   return task;
  }));
  result.notes=workspaceUnique(workspaceList(raw.notes).map(n=>({id:workspaceId(n.id),title:workspaceText(n.title,120,true),body:workspaceText(n.body,20000),updatedAt:workspaceTimestamp(n.updatedAt)})));
@@ -49,4 +59,4 @@ function normalizeWorkspace(raw){
  return result;
 }
 
-export {emptyWorkspace,normalizeWorkspace,workspaceDate,workspaceId};
+export {emptyWorkspace,normalizeWorkspace,workspaceDate,workspaceId,taskCalendarEntries};

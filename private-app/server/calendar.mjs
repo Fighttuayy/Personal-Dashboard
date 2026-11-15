@@ -1,4 +1,5 @@
 import {calendarEvent,HttpError} from './security.mjs';
+import {taskCalendarEntries} from './workspace-data.mjs';
 const root='https://www.googleapis.com/calendar/v3';
 export function calendarService({repo,getGoogleCredentials,fetchImpl=fetch}){
  async function request(userId,path,method='GET',body){
@@ -28,7 +29,7 @@ export function calendarService({repo,getGoogleCredentials,fetchImpl=fetch}){
   const calendarPath='/calendars/'+encodeURIComponent(connection.calendar_id);
   const existing=[];let pageToken;
   do{const query=new URLSearchParams({privateExtendedProperty:'fortor=dashboard-v2',maxResults:'2500',showDeleted:'false'});if(pageToken)query.set('pageToken',pageToken);const page=await request(userId,calendarPath+'/events?'+query);existing.push(...(page.items||[]));pageToken=page.nextPageToken;}while(pageToken);
-  const desired=new Map(tasks.map(task=>{const event=calendarEvent(task,connection.detail);return [event.id,event];}));
+  const desired=new Map(tasks.flatMap(taskCalendarEntries).map(task=>{const event=calendarEvent(task,connection.detail);return [event.id,event];}));
   const present=new Map(existing.filter(event=>event.extendedProperties?.private?.fortor==='dashboard-v2').map(event=>[event.id,event]));
   for(const [id,event] of desired){const previous=present.get(id);if(!previous)await request(userId,calendarPath+'/events','POST',event);else if(previous.summary!==event.summary||previous.start?.date!==event.start.date||previous.end?.date!==event.end.date)await request(userId,calendarPath+'/events/'+encodeURIComponent(id),'PATCH',event);}
   for(const [id] of present)if(!desired.has(id))await request(userId,calendarPath+'/events/'+encodeURIComponent(id),'DELETE');

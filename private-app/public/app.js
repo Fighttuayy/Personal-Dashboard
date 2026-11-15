@@ -138,7 +138,7 @@ function renderFocusViews(rows,mode){
 function animateView(){const target=$('workPanel');target.classList.remove('view-enter');void target.offsetWidth;target.classList.add('view-enter');}
 function setLayout(mode){if(!['standard','todo','board','display'].includes(mode))return;state.dashboardMode=mode;save();render();animateView();}
 function changeTaskStatus(id,status){const t=state.tasks.find(t=>t.id===id);if(!t||!statuses.includes(status))return;if(status==='เสร็จแล้ว'&&t.status!=='เสร็จแล้ว')t.previousStatus=t.status;t.status=status;save();render();}
-function renderCalendar(){let y=calendarDate.getFullYear(),m=calendarDate.getMonth(),first=new Date(y,m,1).getDay(),count=new Date(y,m+1,0).getDate();$('monthTitle').textContent=calendarDate.toLocaleDateString('en-GB',{month:'long',year:'numeric'});let html=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="weekday">${d}</div>`).join('');for(let i=0;i<Math.ceil((first+count)/7)*7;i++){let day=i-first+1;if(day<1||day>count){html+='<div class="cal-day"></div>';continue}let date=iso(new Date(y,m,day));html+=`<div class="cal-day ${date===today?'today':''}"><span>${day}</span>${scopedTasks().filter(t=>t.due===date).map(t=>`<button class="cal-task" style="${categoryStyle(t.category)}" data-id="${t.id}" title="${esc(t.name)}">${esc(t.name)}</button>`).join('')}</div>`}$('calendar').innerHTML=html;$('calendarLegend').innerHTML=state.categories.filter(c=>state.categoryFilter==='all'||c.id===state.categoryFilter).map(c=>typeBadge({category:c.id})).join('');}
+function renderCalendar(){let y=calendarDate.getFullYear(),m=calendarDate.getMonth(),first=new Date(y,m,1).getDay(),count=new Date(y,m+1,0).getDate();$('monthTitle').textContent=calendarDate.toLocaleDateString('en-GB',{month:'long',year:'numeric'});const entries=scopedTasks().flatMap(taskCalendarEntries);let html=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="weekday">${d}</div>`).join('');for(let i=0;i<Math.ceil((first+count)/7)*7;i++){let day=i-first+1;if(day<1||day>count){html+='<div class="cal-day"></div>';continue}let date=iso(new Date(y,m,day));html+=`<div class="cal-day ${date===today?'today':''}"><span>${day}</span>${entries.filter(t=>t.due===date).map(t=>`<button class="cal-task ${t.milestoneId?'cal-milestone':''}" style="${categoryStyle(t.category)}" data-id="${esc(t.id)}" title="${esc(t.name)}">${esc(t.name)}</button>`).join('')}</div>`}$('calendar').innerHTML=html;$('calendarLegend').innerHTML=state.categories.filter(c=>state.categoryFilter==='all'||c.id===state.categoryFilter).map(c=>typeBadge({category:c.id})).join('');}
 function updatePaymentFields() {
  const task = state.tasks.find(t => t.id === editing);
  const partial = task && task.paid > 0 && task.paid < task.amount;
@@ -155,6 +155,9 @@ function openEditor(id) {
  editing = id || null;
  const task = state.tasks.find(t => t.id === id);
  $('taskForm').reset();
+ $('taskMilestones').replaceChildren();
+ for(const milestone of task?.milestones||[]) addTaskMilestone(milestone);
+ $('addTaskMilestone').disabled=$('taskMilestones').children.length>=MAX_TASK_MILESTONES;
  $('modalTitle').textContent = task ? 'Task details' : 'New task';
  const defaults = {category:state.categories[0].id,due:today,status:'ยังไม่เริ่ม',amount:0};
  for (const key of ['name','client','category','due','status','amount','paidDate','notes']) $(key).value = task?.[key] ?? defaults[key] ?? '';
@@ -164,6 +167,27 @@ function openEditor(id) {
  $('editor').showModal();
  if (typeof refreshSelects === 'function') refreshSelects();
 }
+function addTaskMilestone(milestone={}) {
+ const list=$('taskMilestones');
+ if(list.children.length>=MAX_TASK_MILESTONES)return;
+ const row=document.createElement('div');
+ row.className='task-milestone';
+ row.dataset.milestoneId=milestone.id||crypto.randomUUID();
+ row.innerHTML='<label>Milestone name<input required maxlength="100" placeholder="e.g. Send first draft"></label><label>Date<input required type="date"></label><button type="button" class="icon-button" aria-label="Remove milestone">×</button>';
+ const [name,due]=row.querySelectorAll('input');
+ name.value=milestone.name||'';
+ due.value=milestone.due||'';
+ name.oninput=()=>name.setCustomValidity('');
+ row.querySelector('button').onclick=()=>{
+  row.remove();
+  $('addTaskMilestone').disabled=false;
+  $('addTaskMilestone').focus();
+ };
+ list.append(row);
+ $('addTaskMilestone').disabled=list.children.length>=MAX_TASK_MILESTONES;
+ return name;
+}
+$('addTaskMilestone').onclick=()=>addTaskMilestone()?.focus();
 $('paid').addEventListener('change', () => {
  const task = state.tasks.find(t => t.id === editing);
  if ($('paid').checked && task?.paid > 0 && task.paid < task.amount) $('paidDate').value = today;
@@ -175,6 +199,16 @@ $('taskForm').addEventListener('submit', event => {
  const previous = state.tasks.find(t => t.id === editing);
  const amount = Number($('amount').value), name = $('name').value.trim();
  if (!name) { $('name').focus(); return; }
+ const milestones=[];
+ for(const row of $('taskMilestones').children){
+  const [label,due]=row.querySelectorAll('input');
+  if(!label.value.trim()){
+   label.setCustomValidity('Enter a milestone name.');
+   label.reportValidity();
+   return;
+  }
+  milestones.push({id:row.dataset.milestoneId,name:label.value.trim(),due:due.value});
+ }
  const partial = previous && previous.paid > 0 && previous.paid < previous.amount ? previous.paid : 0;
  const fullyPaid = $('paid').checked && amount > 0;
  const paid = fullyPaid ? amount : partial;
@@ -190,6 +224,8 @@ $('taskForm').addEventListener('submit', event => {
   amount, paid, paidDate:fullyPaid ? $('paidDate').value : partial ? previous.paidDate : '',
   notes:$('notes').value
  };
+ if(milestones.length)task.milestones=milestones;
+ else delete task.milestones;
  if (editing) state.tasks = state.tasks.map(t => t.id === editing ? task : t);
  else state.tasks.push(task);
  save();

@@ -16,7 +16,9 @@ export function requireSameOrigin(req,origin){if(req.headers.origin!==origin||re
 export function publicSession(session,isOwner){return {id:session.user.id,name:session.user.name,email:session.user.email,isOwner:Boolean(isOwner)};}
 export function approvedIdentity({user,source},ownerEmail,allowed){return source?.oauth?.providerId==='google'&&source.oauth.userInfo?.email_verified!==false&&user.emailVerified===true&&(user.email?.toLowerCase()===ownerEmail||allowed);}
 export function calendarEvent(task,detail='generic'){
- return {id:'f'+digest(String(task.id)).slice(0,40),summary:detail==='titles'?String(task.name).slice(0,150):'Work deadline',start:{date:task.due},end:{date:nextDate(task.due)},transparency:'transparent',extendedProperties:{private:{fortor:'dashboard-v2'}}};
+ const key=task.milestoneId?JSON.stringify([task.id,task.milestoneId]):String(task.id);
+ const summary=detail==='titles'?String(task.name).slice(0,150):task.milestoneId?'Work milestone':'Work deadline';
+ return {id:'f'+digest(key).slice(0,40),summary,start:{date:task.due},end:{date:nextDate(task.due)},transparency:'transparent',extendedProperties:{private:{fortor:'dashboard-v2'}}};
 }
 function nextDate(value){const date=new Date(value+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+1);return date.toISOString().slice(0,10);}
 export const SHEETS_SCOPE='https://www.googleapis.com/auth/drive.file';
