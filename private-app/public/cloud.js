@@ -28,6 +28,34 @@ const originalCloudRender=render;render=function(){originalCloudRender();$('add'
  if(view==='teams'){const team=currentTeam(),role=cloud.base.teams.find(t=>t.id===team?.id)?.role||'owner';const notice=document.querySelector('.team-local-notice');if(notice)notice.innerHTML='<b>Private team workspace</b><span>Only invited members can access this team. Personal work and income stay private.</span>';const actions=document.querySelector('.team-actions');if(actions)actions.insertAdjacentHTML('afterbegin','<button class="team-secondary" type="button" id="manageMembers">Members · '+esc(role)+'</button>');$('manageMembers')?.addEventListener('click',openMembers);if(!owner)document.querySelectorAll('[data-team-action="new"],[data-team-action="settings"],[data-team-action="copy"]').forEach(el=>el.hidden=true);if(role==='viewer')$('teamsPanel').querySelectorAll('[data-team-edit],[data-team-status],[data-team-action="tasks"],[data-team-action="notes"],[data-team-action="links"]').forEach(el=>{el.disabled=true;el.setAttribute('aria-disabled','true');});}
  if(!owner){document.querySelectorAll('nav [data-view]').forEach(el=>el.hidden=!['teams','security'].includes(el.dataset.view));$('add').hidden=true;$('categoryFilter').hidden=true;$('manageTypes').hidden=true;$('import').hidden=true;$('export').hidden=true;}};
 const originalCloudNavigate=navigate;navigate=function(next){if(!cloud.base.isOwner&&!['teams','security'].includes(next))return;originalCloudNavigate(next);};
+const mobileMore=$('mobileMore');
+const mobileNavigation=mobileMore.closest('nav');
+const mobileViewport=matchMedia('(max-width: 650px)');
+function closeMobileNavigation(restoreFocus=false){
+ if(mobileMore.getAttribute('aria-expanded')!=='true')return;
+ mobileMore.setAttribute('aria-expanded','false');
+ if(restoreFocus)mobileMore.focus();
+}
+mobileMore.onclick=()=>{
+ if(mobileMore.getAttribute('aria-expanded')==='true')closeMobileNavigation();
+ else mobileMore.setAttribute('aria-expanded','true');
+};
+document.addEventListener('click',event=>{
+ if(!mobileNavigation.contains(event.target))closeMobileNavigation();
+});
+document.addEventListener('keydown',event=>{
+ if(event.key==='Escape')closeMobileNavigation(mobileNavigation.contains(document.activeElement));
+});
+mobileViewport.addEventListener('change',()=>closeMobileNavigation());
+const navigateWithCloud=navigate;
+navigate=function(next){
+ const previous=view;
+ navigateWithCloud(next);
+ const selected=mobileNavigation.querySelector('button[data-view].active');
+ mobileMore.setAttribute('aria-current',String(Boolean(selected?.hasAttribute('data-mobile-secondary'))));
+ closeMobileNavigation(mobileViewport.matches&&$('mobileNavExtra').contains(document.activeElement)&&cloud.base.isOwner);
+ if(mobileViewport.matches&&previous!==view)window.scrollTo(0,0);
+};
 async function openMembers(){const team=currentTeam();if(!team)return;$('membersDialog').showModal();$('invitationResult').classList.add('hidden');await refreshMembers();}
 async function refreshMembers(){try{const id=currentTeam().id,result=await cloudRequest('/api/teams/'+encodeURIComponent(id)+'/members');$('inviteForm').hidden=result.role!=='owner';$('memberList').innerHTML=result.members.map(m=>'<article class="security-row"><div><b>'+esc(m.name||'Member')+'</b><small>'+esc(m.email||'')+'</small></div><span>'+esc(m.role)+'</span>'+(result.role==='owner'&&m.role!=='owner'?'<button data-role-member="'+esc(m.user_id)+'" data-new-role="'+(m.role==='viewer'?'editor':'viewer')+'">Make '+(m.role==='viewer'?'editor':'viewer')+'</button><button data-remove-member="'+esc(m.user_id)+'">Remove</button>':'')+'</article>').join('')+result.invites.filter(i=>!i.used_at&&!i.revoked_at&&new Date(i.expires_at)>new Date()).map(i=>'<article class="security-row"><span>'+esc(i.email)+' · '+esc(i.role)+'</span><button data-revoke-invite="'+esc(i.id)+'">Revoke invite</button></article>').join('');}catch(e){$('membersMessage').textContent=e.message;}}
 $('closeMembers').onclick=()=>$('membersDialog').close();$('inviteForm').onsubmit=async e=>{e.preventDefault();try{const result=await cloudRequest('/api/teams/'+encodeURIComponent(currentTeam().id)+'/invites','POST',{email:$('inviteEmail').value,role:$('inviteRole').value});$('invitationLink').value=result.url;$('invitationResult').classList.remove('hidden');$('membersMessage').textContent='Share this link only with the intended member.';await refreshMembers();}catch(error){$('membersMessage').textContent=error.message;}};

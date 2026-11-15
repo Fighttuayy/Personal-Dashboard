@@ -163,7 +163,33 @@ function renderFocusViews(rows,mode){
 function animateView(){const target=$('workPanel');target.classList.remove('view-enter');void target.offsetWidth;target.classList.add('view-enter');}
 function setLayout(mode){if(!['standard','todo','board','display'].includes(mode))return;state.dashboardMode=mode;save();render();animateView();}
 function changeTaskStatus(id,status){const t=state.tasks.find(t=>t.id===id);if(!t||!statuses.includes(status))return;if(status==='เสร็จแล้ว'&&t.status!=='เสร็จแล้ว')t.previousStatus=t.status;t.status=status;save();render();}
-function renderCalendar(){let y=calendarDate.getFullYear(),m=calendarDate.getMonth(),first=new Date(y,m,1).getDay(),count=new Date(y,m+1,0).getDate();$('monthTitle').textContent=calendarDate.toLocaleDateString('en-GB',{month:'long',year:'numeric'});const entries=scopedTasks().flatMap(taskCalendarEntries);let html=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="weekday">${d}</div>`).join('');for(let i=0;i<Math.ceil((first+count)/7)*7;i++){let day=i-first+1;if(day<1||day>count){html+='<div class="cal-day"></div>';continue}let date=iso(new Date(y,m,day));html+=`<div class="cal-day ${date===today?'today':''}"><span>${day}</span>${entries.filter(t=>t.due===date).map(t=>`<button class="cal-task ${t.milestoneId?'cal-milestone':''}" style="${categoryStyle(t.category)}" data-id="${esc(t.id)}" title="${esc(t.name)}">${esc(t.name)}</button>`).join('')}</div>`}$('calendar').innerHTML=html;$('calendarLegend').innerHTML=state.categories.filter(c=>state.categoryFilter==='all'||c.id===state.categoryFilter).map(c=>typeBadge({category:c.id})).join('');}
+function renderCalendar(){
+ const year=calendarDate.getFullYear(), month=calendarDate.getMonth();
+ const first=new Date(year,month,1).getDay(), count=new Date(year,month+1,0).getDate();
+ const byDate=new Map();
+ for(const entry of scopedTasks().flatMap(taskCalendarEntries)){
+  if(!byDate.has(entry.due))byDate.set(entry.due,[]);
+  byDate.get(entry.due).push(entry);
+ }
+ const eventButton=entry=>'<button type="button" class="cal-task '+(entry.milestoneId?'cal-milestone':'')+'" style="'+categoryStyle(entry.category)+'" data-id="'+esc(entry.id)+'" title="'+esc(entry.name)+'">'+esc(entry.name)+'</button>';
+ $('monthTitle').textContent=calendarDate.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+ let grid=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(day=>'<div class="weekday">'+day+'</div>').join('');
+ let agenda='';
+ for(let i=0;i<Math.ceil((first+count)/7)*7;i++){
+  const day=i-first+1;
+  if(day<1||day>count){grid+='<div class="cal-day"></div>';continue;}
+  const date=new Date(year,month,day), key=iso(date);
+  const events=(byDate.get(key)||[]).map(eventButton).join('');
+  grid+='<div class="cal-day '+(key===today?'today':'')+'"><span>'+day+'</span>'+events+'</div>';
+  if(events){
+   const label=date.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+   agenda+='<section class="agenda-day"><h3><time datetime="'+key+'">'+label+'</time>'+(key===today?' <span>Today</span>':'')+'</h3>'+events+'</section>';
+  }
+ }
+ $('calendar').innerHTML=grid;
+ $('mobileAgenda').innerHTML=agenda||'<p class="empty">No scheduled tasks this month.</p>';
+ $('calendarLegend').innerHTML=state.categories.filter(c=>state.categoryFilter==='all'||c.id===state.categoryFilter).map(c=>typeBadge({category:c.id})).join('');
+}
 function updatePaymentFields() {
  const task = state.tasks.find(t => t.id === editing);
  const partial = task && task.paid > 0 && task.paid < task.amount;
@@ -265,7 +291,7 @@ function navigate(next){view=next;document.querySelectorAll('[data-view]').forEa
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>navigate(b.dataset.view));document.querySelectorAll('[data-layout]').forEach(b=>b.onclick=()=>setLayout(b.dataset.layout));document.querySelector('.brand').onclick=e=>{e.preventDefault();navigate('overview')};$('search').oninput=render;$('filter').onchange=render;$('categoryFilter').onchange=()=>{state.categoryFilter=$('categoryFilter').value;save();render()};
 document.addEventListener('change',e=>{if(e.target.matches('[data-complete]')){const t=state.tasks.find(x=>x.id===e.target.dataset.complete);if(t)changeTaskStatus(t.id,e.target.checked?'เสร็จแล้ว':statuses.includes(t.previousStatus)&&t.previousStatus!=='เสร็จแล้ว'?t.previousStatus:'ยังไม่เริ่ม');}if(e.target.matches('[data-status]'))changeTaskStatus(e.target.dataset.status,e.target.value);});
 document.addEventListener('click',e=>{if(e.target.closest('[data-status]'))return;const row=e.target.closest('[data-id]');if(row)openEditor(row.dataset.id)});document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('[data-id]')){e.preventDefault();openEditor(e.target.dataset.id)}});
-$('prevMonth').onclick=()=>{calendarDate.setMonth(calendarDate.getMonth()-1);renderCalendar()};$('nextMonth').onclick=()=>{calendarDate.setMonth(calendarDate.getMonth()+1);renderCalendar()};
+$('prevMonth').onclick=()=>{calendarDate.setDate(1);calendarDate.setMonth(calendarDate.getMonth()-1);renderCalendar()};$('nextMonth').onclick=()=>{calendarDate.setDate(1);calendarDate.setMonth(calendarDate.getMonth()+1);renderCalendar()};
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify({...normalizeWorkspace(state),exportedAt:new Date().toISOString()},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`fortor-backup-${today}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Backup exported')};
 $('today').textContent=now.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});render();$('saveState').textContent='Connecting…';
 
