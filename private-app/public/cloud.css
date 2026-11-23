@@ -64,6 +64,11 @@ body.has-liquid-bg.display-focus #displayView{background:transparent}
 
 #mobileMore,.mobile-agenda{display:none}
 #mobileNavExtra{display:contents}
+.note-edit{display:block;width:100%;padding:0;border:0;background:none;color:inherit;text-align:left;cursor:pointer}
+.note-edit:focus-visible{outline:2px solid var(--accent-text);outline-offset:4px;border-radius:4px}
+.note-link{color:var(--accent-text);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.note-card p,.team-note-row p{display:block;-webkit-line-clamp:unset;overflow:visible;overflow-wrap:anywhere}
+.note-card{cursor:default}
 
 @media(max-width:650px){
  html{scrollbar-gutter:auto}

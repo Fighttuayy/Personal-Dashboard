@@ -1,8 +1,28 @@
 if(!Array.isArray(state.notes))state.notes=[];
+function noteLinks(value){
+ const text=String(value??'');
+ const pattern=/\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+ let html='',cursor=0;
+ for(const match of text.matchAll(pattern)){
+  let label=match[0].replace(/[.,!?;:]+$/,'');
+  for(const [open,close] of [['(',')'],['[',']'],['{','}']]){
+   while(label.endsWith(close)&&label.split(close).length>label.split(open).length)label=label.slice(0,-1);
+  }
+  let href='';
+  try{
+   const url=new URL(/^www\./i.test(label)?'https://'+label:label);
+   if(['https:','http:'].includes(url.protocol)&&!url.username&&!url.password)href=url.href;
+  }catch{}
+  html+=esc(text.slice(cursor,match.index));
+  html+=href?'<a class="note-link" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>':esc(label);
+  cursor=match.index+label.length;
+ }
+ return html+esc(text.slice(cursor));
+}
 let editingNote=null;
 function todayTaskRow(t){return '<div class="todo-row"><input type="checkbox" class="task-check" data-complete="'+esc(t.id)+'" aria-label="Complete: '+esc(t.name)+'" '+(t.status==='เสร็จแล้ว'?'checked':'')+'><button class="todo-detail" data-id="'+esc(t.id)+'"><b>'+esc(t.name)+'</b><small>'+esc(t.client||'Personal project')+' · '+esc(categoryLabels[t.category])+'</small></button>'+statusSelect(t)+'<span class="todo-date '+(days(t.due)<0?'overdue':'')+'">'+dateLabel(t.due)+'</span></div>';}
 function renderToday(){const tasks=scopedTasks().filter(t=>t.status!=='เสร็จแล้ว').sort((a,b)=>a.due.localeCompare(b.due)),due=tasks.filter(t=>days(t.due)===0),late=tasks.filter(t=>days(t.due)<0),soon=tasks.filter(t=>days(t.due)>0&&days(t.due)<=7);const groups=[['Overdue',late],['Due today',due],['Next 7 days',soon]];$('todayPanel').innerHTML='<div class="panel focus-hero"><div><h2>Your focus, today.</h2><p>'+new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})+'</p></div><div class="focus-number"><strong>'+(due.length+late.length)+'</strong><span>to focus on</span></div></div>'+groups.filter(([,items])=>items.length).map(([name,items])=>'<section class="panel today-group"><div class="panel-heading"><h2>'+name+'</h2><span>'+items.length+' tasks</span></div><div class="today-group-list">'+items.map(todayTaskRow).join('')+'</div></section>').join('')+(groups.some(([,items])=>items.length)?'':'<div class="panel notes-empty"><h2>Room to breathe.</h2><p>No open deadlines in the next 7 days.</p></div>');}
-function renderNotes(){const notes=[...state.notes].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));$('notesPanel').innerHTML=notes.length?'<div class="notes-grid">'+notes.map(n=>'<button type="button" class="panel note-card" data-note-id="'+esc(n.id)+'"><h2>'+esc(n.title)+'</h2><p>'+esc(n.body||'No extra notes.')+'</p><time>'+new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</time></button>').join('')+'</div>':'<div class="panel notes-empty"><span>'+icon('tasks')+'</span><h2>A little space for your ideas.</h2><p>Create your first note with New note.</p></div>';}
+function renderNotes(){const notes=[...state.notes].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));$('notesPanel').innerHTML=notes.length?'<div class="notes-grid">'+notes.map(n=>'<article class="panel note-card"><button type="button" class="note-edit" data-note-id="'+esc(n.id)+'"><h2>'+esc(n.title)+'</h2></button><p>'+noteLinks(n.body||'No extra notes.')+'</p><time>'+new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</time></article>').join('')+'</div>':'<div class="panel notes-empty"><span>'+icon('tasks')+'</span><h2>A little space for your ideas.</h2><p>Create your first note with New note.</p></div>';}
 function openNote(id){const note=state.notes.find(n=>n.id===id);editingNote=note?.id||null;$('noteEditorTitle').textContent=note?'Edit note':'New note';$('noteTitle').value=note?.title||'';$('noteBody').value=note?.body||'';$('deleteNote').classList.toggle('hidden',!note);$('noteEditor').showModal();}
 function saveNote(title,body,id=editingNote){title=String(title).trim();if(!title)return {error:'Give your note a title.'};const note={id:id||crypto.randomUUID(),title:title.slice(0,120),body:String(body).slice(0,20000),updatedAt:new Date().toISOString()};const i=state.notes.findIndex(n=>n.id===note.id);if(i>=0)state.notes[i]=note;else state.notes.push(note);save();return {note};}
 $('noteForm').addEventListener('submit',e=>{e.preventDefault();const result=saveNote($('noteTitle').value,$('noteBody').value);if(result.error){toast(result.error);return;}$('noteEditor').close();render();toast('Note saved');});
