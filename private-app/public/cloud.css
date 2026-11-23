@@ -69,6 +69,11 @@ body.has-liquid-bg.display-focus #displayView{background:transparent}
 .note-link{color:var(--accent-text);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
 .note-card p,.team-note-row p{display:block;-webkit-line-clamp:unset;overflow:visible;overflow-wrap:anywhere}
 .note-card{cursor:default}
+.note-toolbar{display:flex;gap:6px;align-items:center;margin:8px 0}
+.note-toolbar button{min-width:42px;min-height:42px;padding:7px;border:1px solid var(--glass-edge);border-radius:8px;background:var(--glass-fill);color:var(--text);font-size:16px}
+.note-toolbar span{margin-left:auto;font-size:11px;color:var(--muted)}
+.note-format-preview{margin-top:10px;padding:12px;border:1px solid var(--glass-edge);border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.8;color:var(--text)}
+.note-format-preview strong,.note-card strong,.team-note-row strong{font-weight:750}
 
 @media(max-width:650px){
  html{scrollbar-gutter:auto}

@@ -20,11 +20,69 @@ function noteLinks(value){
  return html+esc(text.slice(cursor));
 }
 let editingNote=null;
+function formattedNote(note){
+ if(note.bodyFormat!=='markdown')return noteLinks(note.body);
+ return inlineNoteFormat(String(note.body||''));
+}
+function inlineNoteFormat(text,depth=0){
+ if(depth>12)return noteLinks(text);
+ const pattern=/(\*\*\*|\*\*|\*|~~)(?=\S)([\s\S]*?\S)\1/g;
+ let html='',cursor=0;
+ for(const match of text.matchAll(pattern)){
+  html+=noteLinks(text.slice(cursor,match.index));
+  const tags={'***':['strong','em'],'**':['strong'],'*':['em'],'~~':['s']}[match[1]];
+  html+=tags.map(tag=>'<'+tag+'>').join('')+inlineNoteFormat(match[2],depth+1)+tags.toReversed().map(tag=>'</'+tag+'>').join('');
+  cursor=match.index+match[0].length;
+ }
+ return html+noteLinks(text.slice(cursor));
+}
+function setupNoteFormatting(id){
+ const input=$(id),toolbar=document.createElement('div'),preview=document.createElement('div');
+ toolbar.className='note-toolbar';
+ toolbar.setAttribute('role','group');
+ toolbar.setAttribute('aria-label','Text formatting');
+ preview.className='note-format-preview';
+ preview.setAttribute('aria-label','Formatted note preview');
+ toolbar.innerHTML='<button type="button" data-note-mark="**" aria-label="Bold (Ctrl+B)"><strong>B</strong></button><button type="button" data-note-mark="*" aria-label="Italic (Ctrl+I)"><em>I</em></button><button type="button" data-note-mark="~~" aria-label="Strikethrough"><s>S</s></button><span>Preview below</span>';
+ input.before(toolbar);
+ input.after(preview);
+ input.refreshNotePreview=()=>{
+  preview.innerHTML=formattedNote({body:input.value,bodyFormat:input.dataset.bodyFormat});
+  preview.hidden=!input.value;
+ };
+ function format(mark){
+  const start=input.selectionStart,end=input.selectionEnd;
+  if(start===end){input.focus();return;}
+  const selected=input.value.slice(start,end);
+  const before=input.value.slice(0,start),after=input.value.slice(end);
+  const starsBefore=before.match(/\*+$/)?.[0].length||0,starsAfter=after.match(/^\*+/)?.[0].length||0;
+  const adjacent=before.endsWith(mark)&&after.startsWith(mark);
+  const unwrap=adjacent&&(mark!=='*'||(starsBefore%2===1&&starsAfter%2===1));
+  const from=unwrap?start-mark.length:start,to=unwrap?end+mark.length:end;
+  const replacement=unwrap?selected:mark+selected+mark;
+  if(input.value.length-(to-from)+replacement.length>input.maxLength)return;
+  input.setRangeText(replacement,from,to,'select');
+  input.dataset.bodyFormat='markdown';
+  input.focus();
+  input.setSelectionRange(unwrap?from:from+mark.length,(unwrap?from:from+mark.length)+selected.length);
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+ }
+ toolbar.addEventListener('pointerdown',event=>{if(event.target.closest('button'))event.preventDefault();});
+ toolbar.onclick=event=>{const button=event.target.closest('[data-note-mark]');if(button)format(button.dataset.noteMark);};
+ input.addEventListener('keydown',event=>{
+  if(!(event.ctrlKey||event.metaKey)||event.altKey)return;
+  const mark={b:'**',i:'*'}[event.key.toLowerCase()];
+  if(mark){event.preventDefault();format(mark);}
+ });
+ input.addEventListener('input',input.refreshNotePreview);
+}
+setupNoteFormatting('noteBody');
+setupNoteFormatting('teamItemBody');
 function todayTaskRow(t){return '<div class="todo-row"><input type="checkbox" class="task-check" data-complete="'+esc(t.id)+'" aria-label="Complete: '+esc(t.name)+'" '+(t.status==='เสร็จแล้ว'?'checked':'')+'><button class="todo-detail" data-id="'+esc(t.id)+'"><b>'+esc(t.name)+'</b><small>'+esc(t.client||'Personal project')+' · '+esc(categoryLabels[t.category])+'</small></button>'+statusSelect(t)+'<span class="todo-date '+(days(t.due)<0?'overdue':'')+'">'+dateLabel(t.due)+'</span></div>';}
 function renderToday(){const tasks=scopedTasks().filter(t=>t.status!=='เสร็จแล้ว').sort((a,b)=>a.due.localeCompare(b.due)),due=tasks.filter(t=>days(t.due)===0),late=tasks.filter(t=>days(t.due)<0),soon=tasks.filter(t=>days(t.due)>0&&days(t.due)<=7);const groups=[['Overdue',late],['Due today',due],['Next 7 days',soon]];$('todayPanel').innerHTML='<div class="panel focus-hero"><div><h2>Your focus, today.</h2><p>'+new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})+'</p></div><div class="focus-number"><strong>'+(due.length+late.length)+'</strong><span>to focus on</span></div></div>'+groups.filter(([,items])=>items.length).map(([name,items])=>'<section class="panel today-group"><div class="panel-heading"><h2>'+name+'</h2><span>'+items.length+' tasks</span></div><div class="today-group-list">'+items.map(todayTaskRow).join('')+'</div></section>').join('')+(groups.some(([,items])=>items.length)?'':'<div class="panel notes-empty"><h2>Room to breathe.</h2><p>No open deadlines in the next 7 days.</p></div>');}
-function renderNotes(){const notes=[...state.notes].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));$('notesPanel').innerHTML=notes.length?'<div class="notes-grid">'+notes.map(n=>'<article class="panel note-card"><button type="button" class="note-edit" data-note-id="'+esc(n.id)+'"><h2>'+esc(n.title)+'</h2></button><p>'+noteLinks(n.body||'No extra notes.')+'</p><time>'+new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</time></article>').join('')+'</div>':'<div class="panel notes-empty"><span>'+icon('tasks')+'</span><h2>A little space for your ideas.</h2><p>Create your first note with New note.</p></div>';}
-function openNote(id){const note=state.notes.find(n=>n.id===id);editingNote=note?.id||null;$('noteEditorTitle').textContent=note?'Edit note':'New note';$('noteTitle').value=note?.title||'';$('noteBody').value=note?.body||'';$('deleteNote').classList.toggle('hidden',!note);$('noteEditor').showModal();}
-function saveNote(title,body,id=editingNote){title=String(title).trim();if(!title)return {error:'Give your note a title.'};const note={id:id||crypto.randomUUID(),title:title.slice(0,120),body:String(body).slice(0,20000),updatedAt:new Date().toISOString()};const i=state.notes.findIndex(n=>n.id===note.id);if(i>=0)state.notes[i]=note;else state.notes.push(note);save();return {note};}
+function renderNotes(){const notes=[...state.notes].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));$('notesPanel').innerHTML=notes.length?'<div class="notes-grid">'+notes.map(n=>'<article class="panel note-card"><button type="button" class="note-edit" data-note-id="'+esc(n.id)+'"><h2>'+esc(n.title)+'</h2></button><p>'+(formattedNote(n) || 'No extra notes.')+'</p><time>'+new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</time></article>').join('')+'</div>':'<div class="panel notes-empty"><span>'+icon('tasks')+'</span><h2>A little space for your ideas.</h2><p>Create your first note with New note.</p></div>';}
+function openNote(id){const note=state.notes.find(n=>n.id===id);editingNote=note?.id||null;$('noteEditorTitle').textContent=note?'Edit note':'New note';$('noteTitle').value=note?.title||'';$('noteBody').value=note?.body||'';$('noteBody').dataset.bodyFormat=note?.bodyFormat||'plain';$('noteBody').refreshNotePreview();$('deleteNote').classList.toggle('hidden',!note);$('noteEditor').showModal();}
+function saveNote(title,body,id=editingNote){title=String(title).trim();if(!title)return {error:'Give your note a title.'};const note={id:id||crypto.randomUUID(),title:title.slice(0,120),body:String(body).slice(0,20000),...($('noteBody').dataset.bodyFormat==='markdown'?{bodyFormat:'markdown'}:{}),updatedAt:new Date().toISOString()};const i=state.notes.findIndex(n=>n.id===note.id);if(i>=0)state.notes[i]=note;else state.notes.push(note);save();return {note};}
 $('noteForm').addEventListener('submit',e=>{e.preventDefault();const result=saveNote($('noteTitle').value,$('noteBody').value);if(result.error){toast(result.error);return;}$('noteEditor').close();render();toast('Note saved');});
 $('closeNote').onclick=()=>$('noteEditor').close();$('deleteNote').onclick=()=>{if(!confirm('Delete this note?'))return;state.notes=state.notes.filter(n=>n.id!==editingNote);save();$('noteEditor').close();render();toast('Note deleted');};
 $('notesPanel').addEventListener('click',e=>{const button=e.target.closest('[data-note-id]');if(button)openNote(button.dataset.noteId)});

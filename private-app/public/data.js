@@ -45,11 +45,11 @@ function normalizeWorkspace(raw){
   if(milestones.length)task.milestones=milestones;
   return task;
  }));
- result.notes=workspaceUnique(workspaceList(raw.notes).map(n=>({id:workspaceId(n.id),title:workspaceText(n.title,120,true),body:workspaceText(n.body,20000),updatedAt:workspaceTimestamp(n.updatedAt)})));
+ result.notes=workspaceUnique(workspaceList(raw.notes).map(n=>({id:workspaceId(n.id),title:workspaceText(n.title,120,true),body:workspaceText(n.body,20000),...(n.bodyFormat==='markdown'?{bodyFormat:'markdown'}:{}),updatedAt:workspaceTimestamp(n.updatedAt)})));
  result.teams=workspaceUnique(workspaceList(raw.teams,500).map(team=>({
   id:workspaceId(team.id),name:workspaceText(team.name,80,true),description:workspaceText(team.description,1000),updatedAt:workspaceTimestamp(team.updatedAt),
   tasks:workspaceUnique(workspaceList(team.tasks).map(t=>({id:workspaceId(t.id),title:workspaceText(t.title,150,true),due:workspaceDate(t.due),status:workspaceStatus(t.status),assignee:workspaceText(t.assignee,80)}))),
-  notes:workspaceUnique(workspaceList(team.notes).map(n=>({id:workspaceId(n.id),title:workspaceText(n.title,150,true),body:workspaceText(n.body,20000)}))),
+  notes:workspaceUnique(workspaceList(team.notes).map(n=>({id:workspaceId(n.id),title:workspaceText(n.title,150,true),body:workspaceText(n.body,20000),...(n.bodyFormat==='markdown'?{bodyFormat:'markdown'}:{})}))),
   links:workspaceUnique(workspaceList(team.links).map(l=>({id:workspaceId(l.id),title:workspaceText(l.title,150,true),url:workspaceLink(l.url)})))
  })));
  result.theme=raw.theme==='light'?'light':'dark';
