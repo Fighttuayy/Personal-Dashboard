@@ -6,6 +6,7 @@ let state=emptyWorkspace(),storageAvailable=true,storageReadFailed=false;
 if(cloudBootstrap.personal)Object.assign(state,cloudBootstrap.personal.data);
 state.teams=cloudBootstrap.teams.map(team=>team.data);state=normalizeWorkspace(state);
 let displayFocus=false;
+let displayBlackBackground=false;
 let view=cloudBootstrap.user.isOwner?'overview':'teams', editing=null, calendarDate=new Date(now.getFullYear(),now.getMonth(),1);
 const statuses=['ยังไม่เริ่ม','กำลังทำ','รอตรวจ','เสร็จแล้ว'];
 const statusLabels={"ยังไม่เริ่ม":"Not started","กำลังทำ":"In progress","รอตรวจ":"In review","เสร็จแล้ว":"Done"};
@@ -299,7 +300,7 @@ function renderDisplay(){
  const tasks=scopedTasks(),open=tasks.filter(t=>t.status!=='เสร็จแล้ว').sort((a,b)=>a.due.localeCompare(b.due)),dueToday=open.filter(t=>days(t.due)===0),overdue=open.filter(t=>days(t.due)<0),done=tasks.length-open.length;
  const urgent=open.filter(t=>days(t.due)<=0),priority=urgent.length?urgent:open.filter(t=>t.due===open[0]?.due),priorityIds=new Set(priority.map(t=>t.id)),remaining=open.filter(t=>!priorityIds.has(t.id));
  const lane=(label,list)=>'<section class="display-lane"><div class="display-lane-head"><h2>'+label+'</h2><span>'+list.length+'</span></div>'+list.slice(0,6).map(t=>'<button class="display-task" data-id="'+esc(t.id)+'"><div><b>'+esc(t.name)+'</b><small>'+esc(t.client||'Personal project')+' · '+esc(categoryLabels[t.category])+'</small></div><div class="display-task-meta">'+badge(t.status)+'<time class="'+(days(t.due)<0?'overdue':'')+'">'+dateLabel(t.due)+'</time></div></button>').join('')+(list.length>6?'<div class="display-more">+'+(list.length-6)+' more in All tasks</div>':'')+(list.length?'':'<div class="display-empty">All clear</div>')+'</section>';
- $('displayView').innerHTML='<div class="display-controls"><span>DISPLAY</span><div><span class="fullscreen-hint">Esc to exit</span><button class="fullscreen-button" id="displayFullscreen" type="button" aria-pressed="false">Full screen ↗</button></div></div><div class="display-top"><div><div class="display-eyebrow"><i></i> WORKSPACE / LIVE</div><div class="display-clock" id="displayClock"></div><div class="display-date" id="displayDate"></div></div><div class="display-score"><strong>'+done+'<span> / '+tasks.length+'</span></strong><small>tasks completed</small><div class="progress-track"><span style="width:'+(tasks.length?Math.round(done/tasks.length*100):0)+'%"></span></div></div></div><div class="display-metrics"><div><strong>'+open.length+'</strong><span>Open tasks</span></div><div><strong>'+dueToday.length+'</strong><span>Due today</span></div><div><strong>'+overdue.length+'</strong><span>Overdue</span></div><div><strong>'+open.filter(t=>t.status==='รอตรวจ').length+'</strong><span>In review</span></div></div><div class="display-grid">'+lane('Priority',priority)+lane('In progress',remaining.filter(t=>t.status==='กำลังทำ'))+lane('Up next',remaining.filter(t=>t.status!=='กำลังทำ'))+'</div>';updateDisplayClock();$('displayFullscreen').onclick=toggleDisplayFullscreen;syncDisplayFullscreen();
+ $('displayView').innerHTML='<div class="display-controls"><span>DISPLAY</span><div><span class="fullscreen-hint">Esc to exit</span><button class="fullscreen-button" id="displayBlackBackground" type="button" aria-pressed="false" hidden>Black background</button><button class="fullscreen-button" id="displayFullscreen" type="button" aria-pressed="false">Full screen ↗</button></div></div><div class="display-top"><div><div class="display-eyebrow"><i></i> WORKSPACE / LIVE</div><div class="display-clock" id="displayClock"></div><div class="display-date" id="displayDate"></div></div><div class="display-score"><strong>'+done+'<span> / '+tasks.length+'</span></strong><small>tasks completed</small><div class="progress-track"><span style="width:'+(tasks.length?Math.round(done/tasks.length*100):0)+'%"></span></div></div></div><div class="display-metrics"><div><strong>'+open.length+'</strong><span>Open tasks</span></div><div><strong>'+dueToday.length+'</strong><span>Due today</span></div><div><strong>'+overdue.length+'</strong><span>Overdue</span></div><div><strong>'+open.filter(t=>t.status==='รอตรวจ').length+'</strong><span>In review</span></div></div><div class="display-grid">'+lane('Priority',priority)+lane('In progress',remaining.filter(t=>t.status==='กำลังทำ'))+lane('Up next',remaining.filter(t=>t.status!=='กำลังทำ'))+'</div>';updateDisplayClock();$('displayFullscreen').onclick=toggleDisplayFullscreen;$('displayBlackBackground').onclick=toggleDisplayBlackBackground;syncDisplayFullscreen();
 }
 function updateDisplayClock(){const clock=$('displayClock');if(!clock)return;const d=new Date();clock.textContent=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});$('displayDate').textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}
 if(typeof setInterval==='function')setInterval(()=>{if(view!=='overview'||state.dashboardMode!=='display')return;if(iso(new Date())!==today){location.reload();return}updateDisplayClock();},1000);
@@ -317,7 +318,26 @@ $('manageTypes').onclick=openTypeManager;$('manageTypesFromEditor').onclick=open
 $('addTypeForm').addEventListener('submit',e=>{e.preventDefault();const result=addWorkType($('newTypeName').value);if(result.error){$('typeMessage').textContent=result.error;return;}$('newTypeName').value='';renderTypeManager();$('typeMessage').textContent='Work type added.';});
 $('typeRows').addEventListener('submit',e=>{const form=e.target.closest('[data-rename-type]');if(!form)return;e.preventDefault();const result=renameWorkType(form.dataset.renameType,form.elements.typeName.value,form.elements.typeColor.value);if(result.error){$('typeMessage').textContent=result.error;return;}renderTypeManager();$('typeMessage').textContent='Updated everywhere.';});
 
-function syncDisplayFullscreen(){const active=document.fullscreenElement===$('displayView')||displayFocus;const b=$('displayFullscreen');if(b){b.textContent=active?'Exit full screen ↙':'Full screen ↗';b.setAttribute('aria-pressed',String(active));b.setAttribute('aria-label',active?'Exit full screen display':'Open full screen display');}if(typeof requestAnimationFrame==='function')requestAnimationFrame(fitDisplayToScreen);}
+function syncDisplayFullscreen(){
+ const panel=$('displayView'),active=document.fullscreenElement===panel||displayFocus;
+ const b=$('displayFullscreen'),darkButton=$('displayBlackBackground');
+ if(b){
+  b.textContent=active?'Exit full screen ↙':'Full screen ↗';
+  b.setAttribute('aria-pressed',String(active));
+  b.setAttribute('aria-label',active?'Exit full screen display':'Open full screen display');
+ }
+ panel.classList.toggle('display-monochrome',active&&displayBlackBackground);
+ if(darkButton){
+  darkButton.hidden=!active;
+  darkButton.setAttribute('aria-pressed',String(displayBlackBackground));
+  darkButton.textContent=displayBlackBackground?'Restore background':'Black background';
+ }
+ if(typeof requestAnimationFrame==='function')requestAnimationFrame(fitDisplayToScreen);
+}
+function toggleDisplayBlackBackground(){
+ displayBlackBackground=!displayBlackBackground;
+ syncDisplayFullscreen();
+}
 function enterDisplayFocus(){displayFocus=true;document.body.classList.add('display-focus');syncDisplayFullscreen();}
 function exitDisplayFocus(){displayFocus=false;document.body.classList.remove('display-focus');syncDisplayFullscreen();}
 async function toggleDisplayFullscreen(){if(document.fullscreenElement){try{await document.exitFullscreen();}catch(e){toast('Press Esc to exit full screen');}return;}if(displayFocus){exitDisplayFocus();return;}if(typeof closeDropdown==='function')closeDropdown();const panel=$('displayView');if(typeof panel.requestFullscreen==='function'){try{await panel.requestFullscreen();syncDisplayFullscreen();return;}catch(e){/* Embedded browsers can restrict native full screen. */}}enterDisplayFocus();}

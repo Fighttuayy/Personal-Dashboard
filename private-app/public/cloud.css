@@ -63,6 +63,28 @@ body.has-liquid-bg.display-focus #displayView{background:transparent}
 .revenue .bar-col>span{white-space:nowrap;font-size:clamp(8px,1vw,12px)}
 
 #mobileMore,.mobile-agenda{display:none}
+#displayView.display-monochrome{
+ color-scheme:dark;
+ --text:#fff;--muted:#ccc;--faint:#aaa;--panel:#000;--red:#fff;
+ --accent-text:#fff;--accent-border:#ffffff40;--border:#ffffff30;--line:#ffffff24;--hover:#ffffff0d;
+ --glass-fill:#000;--glass-edge:#ffffff30;--glass-highlight:transparent;
+ background:#000!important;color:#fff!important;
+}
+#displayView.display-monochrome .display-lane,
+#displayView.display-monochrome .display-metrics>div,
+#displayView.display-monochrome .display-task,
+#displayView.display-monochrome .fullscreen-button,
+#displayView.display-monochrome .badge{background:#000!important;color:#fff!important;border-color:#ffffff40!important;box-shadow:none;backdrop-filter:none}
+#displayView.display-monochrome :is(b,strong,h2,time,.display-clock){color:#fff!important}
+#displayView.display-monochrome .progress-track{background:#ffffff25}
+#displayView.display-monochrome .progress-track span,
+#displayView.display-monochrome .display-eyebrow i{background:#fff}
+#displayView.display-monochrome .workspace-background{display:none}
+@media(max-width:650px){
+ #displayView .display-controls>div{gap:6px}
+ #displayBlackBackground{font-size:11px;padding:7px 9px;min-height:36px}
+ #displayView:fullscreen .fullscreen-hint,.display-focus .fullscreen-hint{display:none}
+}
 #mobileNavExtra{display:contents}
 .note-edit{display:block;width:100%;padding:0;border:0;background:none;color:inherit;text-align:left;cursor:pointer}
 .note-edit:focus-visible{outline:2px solid var(--accent-text);outline-offset:4px;border-radius:4px}
