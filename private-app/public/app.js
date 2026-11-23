@@ -7,6 +7,8 @@ if(cloudBootstrap.personal)Object.assign(state,cloudBootstrap.personal.data);
 state.teams=cloudBootstrap.teams.map(team=>team.data);state=normalizeWorkspace(state);
 let displayFocus=false;
 let displayBlackBackground=false;
+let displayTextBrightness=100;
+let displayColorTransition=null;
 let view=cloudBootstrap.user.isOwner?'overview':'teams', editing=null, calendarDate=new Date(now.getFullYear(),now.getMonth(),1);
 const statuses=['ยังไม่เริ่ม','กำลังทำ','รอตรวจ','เสร็จแล้ว'];
 const statusLabels={"ยังไม่เริ่ม":"Not started","กำลังทำ":"In progress","รอตรวจ":"In review","เสร็จแล้ว":"Done"};
@@ -300,7 +302,7 @@ function renderDisplay(){
  const tasks=scopedTasks(),open=tasks.filter(t=>t.status!=='เสร็จแล้ว').sort((a,b)=>a.due.localeCompare(b.due)),dueToday=open.filter(t=>days(t.due)===0),overdue=open.filter(t=>days(t.due)<0),done=tasks.length-open.length;
  const urgent=open.filter(t=>days(t.due)<=0),priority=urgent.length?urgent:open.filter(t=>t.due===open[0]?.due),priorityIds=new Set(priority.map(t=>t.id)),remaining=open.filter(t=>!priorityIds.has(t.id));
  const lane=(label,list)=>'<section class="display-lane"><div class="display-lane-head"><h2>'+label+'</h2><span>'+list.length+'</span></div>'+list.slice(0,6).map(t=>'<button class="display-task" data-id="'+esc(t.id)+'"><div><b>'+esc(t.name)+'</b><small>'+esc(t.client||'Personal project')+' · '+esc(categoryLabels[t.category])+'</small></div><div class="display-task-meta">'+badge(t.status)+'<time class="'+(days(t.due)<0?'overdue':'')+'">'+dateLabel(t.due)+'</time></div></button>').join('')+(list.length>6?'<div class="display-more">+'+(list.length-6)+' more in All tasks</div>':'')+(list.length?'':'<div class="display-empty">All clear</div>')+'</section>';
- $('displayView').innerHTML='<div class="display-controls"><span>DISPLAY</span><div><span class="fullscreen-hint">Esc to exit</span><button class="fullscreen-button" id="displayBlackBackground" type="button" aria-pressed="false" hidden>Black background</button><button class="fullscreen-button" id="displayFullscreen" type="button" aria-pressed="false">Full screen ↗</button></div></div><div class="display-top"><div><div class="display-eyebrow"><i></i> WORKSPACE / LIVE</div><div class="display-clock" id="displayClock"></div><div class="display-date" id="displayDate"></div></div><div class="display-score"><strong>'+done+'<span> / '+tasks.length+'</span></strong><small>tasks completed</small><div class="progress-track"><span style="width:'+(tasks.length?Math.round(done/tasks.length*100):0)+'%"></span></div></div></div><div class="display-metrics"><div><strong>'+open.length+'</strong><span>Open tasks</span></div><div><strong>'+dueToday.length+'</strong><span>Due today</span></div><div><strong>'+overdue.length+'</strong><span>Overdue</span></div><div><strong>'+open.filter(t=>t.status==='รอตรวจ').length+'</strong><span>In review</span></div></div><div class="display-grid">'+lane('Priority',priority)+lane('In progress',remaining.filter(t=>t.status==='กำลังทำ'))+lane('Up next',remaining.filter(t=>t.status!=='กำลังทำ'))+'</div>';updateDisplayClock();$('displayFullscreen').onclick=toggleDisplayFullscreen;$('displayBlackBackground').onclick=toggleDisplayBlackBackground;syncDisplayFullscreen();
+ $('displayView').innerHTML='<div class="display-controls"><span>DISPLAY</span><div><span class="fullscreen-hint">Esc to exit</span><label id="displayTextBrightnessControl" class="display-text-brightness" hidden><span>Text brightness</span><input id="displayTextBrightness" type="range" min="40" max="100" step="1" value="100"><output id="displayTextBrightnessValue" for="displayTextBrightness">100%</output></label><button class="fullscreen-button" id="displayBlackBackground" type="button" aria-pressed="false" hidden>Black background</button><button class="fullscreen-button" id="displayFullscreen" type="button" aria-pressed="false">Full screen ↗</button></div></div><div class="display-top"><div><div class="display-eyebrow"><i></i> WORKSPACE / LIVE</div><div class="display-clock" id="displayClock"></div><div class="display-date" id="displayDate"></div></div><div class="display-score"><strong>'+done+'<span> / '+tasks.length+'</span></strong><small>tasks completed</small><div class="progress-track"><span style="width:'+(tasks.length?Math.round(done/tasks.length*100):0)+'%"></span></div></div></div><div class="display-metrics"><div><strong>'+open.length+'</strong><span>Open tasks</span></div><div><strong>'+dueToday.length+'</strong><span>Due today</span></div><div><strong>'+overdue.length+'</strong><span>Overdue</span></div><div><strong>'+open.filter(t=>t.status==='รอตรวจ').length+'</strong><span>In review</span></div></div><div class="display-grid">'+lane('Priority',priority)+lane('In progress',remaining.filter(t=>t.status==='กำลังทำ'))+lane('Up next',remaining.filter(t=>t.status!=='กำลังทำ'))+'</div>';updateDisplayClock();$('displayFullscreen').onclick=toggleDisplayFullscreen;$('displayBlackBackground').onclick=toggleDisplayBlackBackground;$('displayTextBrightness').oninput=updateDisplayTextBrightness;syncDisplayFullscreen();
 }
 function updateDisplayClock(){const clock=$('displayClock');if(!clock)return;const d=new Date();clock.textContent=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});$('displayDate').textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}
 if(typeof setInterval==='function')setInterval(()=>{if(view!=='overview'||state.dashboardMode!=='display')return;if(iso(new Date())!==today){location.reload();return}updateDisplayClock();},1000);
@@ -327,6 +329,13 @@ function syncDisplayFullscreen(){
   b.setAttribute('aria-label',active?'Exit full screen display':'Open full screen display');
  }
  panel.classList.toggle('display-monochrome',active&&displayBlackBackground);
+ panel.style.setProperty('--display-ink',String(Math.round(displayTextBrightness*255/100)));
+ const brightness=$('displayTextBrightnessControl');
+ if(brightness){
+  brightness.hidden=!(active&&displayBlackBackground);
+  $('displayTextBrightness').value=displayTextBrightness;
+  $('displayTextBrightnessValue').value=displayTextBrightness+'%';
+ }
  if(darkButton){
   darkButton.hidden=!active;
   darkButton.setAttribute('aria-pressed',String(displayBlackBackground));
@@ -334,9 +343,24 @@ function syncDisplayFullscreen(){
  }
  if(typeof requestAnimationFrame==='function')requestAnimationFrame(fitDisplayToScreen);
 }
-function toggleDisplayBlackBackground(){
- displayBlackBackground=!displayBlackBackground;
- syncDisplayFullscreen();
+async function toggleDisplayBlackBackground(){
+ if(displayColorTransition)return;
+ const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const change=()=>{
+  displayBlackBackground=!displayBlackBackground;
+  syncDisplayFullscreen();
+ };
+ if(!reduced&&typeof document.startViewTransition==='function'){
+  displayColorTransition=document.startViewTransition(change);
+  try{await displayColorTransition.finished;}catch{}finally{displayColorTransition=null;}
+ }else change();
+}
+function updateDisplayTextBrightness(event){
+ const value=Number(event.target.value);
+ if(!Number.isFinite(value))return;
+ displayTextBrightness=Math.min(100,Math.max(40,value));
+ $('displayView').style.setProperty('--display-ink',String(Math.round(displayTextBrightness*255/100)));
+ $('displayTextBrightnessValue').value=displayTextBrightness+'%';
 }
 function enterDisplayFocus(){displayFocus=true;document.body.classList.add('display-focus');syncDisplayFullscreen();}
 function exitDisplayFocus(){displayFocus=false;document.body.classList.remove('display-focus');syncDisplayFullscreen();}

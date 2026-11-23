@@ -63,23 +63,34 @@ body.has-liquid-bg.display-focus #displayView{background:transparent}
 .revenue .bar-col>span{white-space:nowrap;font-size:clamp(8px,1vw,12px)}
 
 #mobileMore,.mobile-agenda{display:none}
+#displayView{transition:background-color .45s ease,color .45s ease}
+#displayView .workspace-background{transition:opacity .45s ease,visibility .45s}
+#displayView :is(.display-lane,.display-metrics>div,.display-task,.fullscreen-button,.badge,b,strong,h2,time,.display-clock,small,span){transition:color .35s ease,background-color .45s ease,border-color .45s ease}
+.display-text-brightness{display:flex;align-items:center;gap:8px;margin:0;font-size:12px;letter-spacing:0;font-weight:400;white-space:nowrap}
+.display-text-brightness input[type=range]{width:85px;min-width:0;padding:0;margin:0;min-height:36px;accent-color:currentColor}
+.display-text-brightness output{width:34px;font-variant-numeric:tabular-nums}
+#displayView .display-controls>div{flex-wrap:wrap;justify-content:flex-end}
 #displayView.display-monochrome{
  color-scheme:dark;
- --text:#fff;--muted:#ccc;--faint:#aaa;--panel:#000;--red:#fff;
- --accent-text:#fff;--accent-border:#ffffff40;--border:#ffffff30;--line:#ffffff24;--hover:#ffffff0d;
+ --text:rgb(var(--display-ink,255) var(--display-ink,255) var(--display-ink,255));
+ --muted:var(--text);--faint:var(--text);--panel:#000;--red:#fff;
+ --accent-text:var(--text);--accent-border:#ffffff40;--border:#ffffff30;--line:#ffffff24;--hover:#ffffff0d;
  --glass-fill:#000;--glass-edge:#ffffff30;--glass-highlight:transparent;
- background:#000!important;color:#fff!important;
+ background:#000!important;color:var(--text)!important;
 }
 #displayView.display-monochrome .display-lane,
 #displayView.display-monochrome .display-metrics>div,
 #displayView.display-monochrome .display-task,
 #displayView.display-monochrome .fullscreen-button,
-#displayView.display-monochrome .badge{background:#000!important;color:#fff!important;border-color:#ffffff40!important;box-shadow:none;backdrop-filter:none}
-#displayView.display-monochrome :is(b,strong,h2,time,.display-clock){color:#fff!important}
+#displayView.display-monochrome .badge{background:#000!important;color:var(--text)!important;border-color:#ffffff40!important;box-shadow:none;backdrop-filter:none}
+#displayView.display-monochrome :is(b,strong,h2,time,.display-clock){color:var(--text)!important}
 #displayView.display-monochrome .progress-track{background:#ffffff25}
 #displayView.display-monochrome .progress-track span,
 #displayView.display-monochrome .display-eyebrow i{background:#fff}
-#displayView.display-monochrome .workspace-background{display:none}
+#displayView.display-monochrome .workspace-background{opacity:0;visibility:hidden}
+@media(prefers-reduced-motion:reduce){
+ #displayView,#displayView .workspace-background,#displayView *{transition:none!important}
+}
 @media(max-width:650px){
  #displayView .display-controls>div{gap:6px}
  #displayBlackBackground{font-size:11px;padding:7px 9px;min-height:36px}
