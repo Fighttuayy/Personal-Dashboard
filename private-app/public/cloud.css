@@ -64,6 +64,7 @@ body.has-liquid-bg.display-focus #displayView{background:transparent}
 
 #mobileMore,.mobile-agenda{display:none}
 #displayView{transition:background-color .45s ease,color .45s ease}
+#displayView::backdrop{background:#000}
 #displayView .workspace-background{transition:opacity .45s ease,visibility .45s}
 #displayView :is(.display-lane,.display-metrics>div,.display-task,.fullscreen-button,.badge,b,strong,h2,time,.display-clock,small,span){transition:color .35s ease,background-color .45s ease,border-color .45s ease}
 .display-text-brightness{display:flex;align-items:center;gap:8px;margin:0;font-size:12px;letter-spacing:0;font-weight:400;white-space:nowrap}

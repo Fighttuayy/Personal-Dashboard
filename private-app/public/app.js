@@ -8,7 +8,6 @@ state.teams=cloudBootstrap.teams.map(team=>team.data);state=normalizeWorkspace(s
 let displayFocus=false;
 let displayBlackBackground=false;
 let displayTextBrightness=100;
-let displayColorTransition=null;
 let view=cloudBootstrap.user.isOwner?'overview':'teams', editing=null, calendarDate=new Date(now.getFullYear(),now.getMonth(),1);
 const statuses=['ยังไม่เริ่ม','กำลังทำ','รอตรวจ','เสร็จแล้ว'];
 const statusLabels={"ยังไม่เริ่ม":"Not started","กำลังทำ":"In progress","รอตรวจ":"In review","เสร็จแล้ว":"Done"};
@@ -343,17 +342,9 @@ function syncDisplayFullscreen(){
  }
  if(typeof requestAnimationFrame==='function')requestAnimationFrame(fitDisplayToScreen);
 }
-async function toggleDisplayBlackBackground(){
- if(displayColorTransition)return;
- const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
- const change=()=>{
-  displayBlackBackground=!displayBlackBackground;
-  syncDisplayFullscreen();
- };
- if(!reduced&&typeof document.startViewTransition==='function'){
-  displayColorTransition=document.startViewTransition(change);
-  try{await displayColorTransition.finished;}catch{}finally{displayColorTransition=null;}
- }else change();
+function toggleDisplayBlackBackground(){
+ displayBlackBackground=!displayBlackBackground;
+ syncDisplayFullscreen();
 }
 function updateDisplayTextBrightness(event){
  const value=Number(event.target.value);
