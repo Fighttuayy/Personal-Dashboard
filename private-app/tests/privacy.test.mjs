@@ -1,0 +1,2 @@
+import test from 'node:test';import request from 'supertest';import {createApp} from '../server/app.mjs';
+test('privacy notice is public, escapes configured contact, and never grants workspace access',async()=>{const app=createApp({config:{origin:'http://localhost',production:false,ownerEmail:'owner<&>@example.invalid'}});await request(app).get('/privacy').expect(200).expect(/owner&lt;&amp;&gt;@example.invalid/);await request(app).get('/server/privacy.html').expect(404);await request(app).get('/api/bootstrap').expect(503);});
